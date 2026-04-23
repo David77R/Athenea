@@ -1,0 +1,106 @@
+﻿# Orquestación maestra Athenea: PostgreSQL (auth), MongoDB (clínica), Redis (caché/colas),
+# microservicios y gateway Nginx.
+#
+# Uso rápido:
+#   1) cp .env.example .env  (ajusta MONGODB_URI si usas Atlas)
+#   2) docker compose up --build
+#   API: http://localhost:8080/api/auth/health
+#
+# Atlas: en .env pon MONGODB_URI=mongodb+srv://... y comenta o elimina la dependencia
+# de `mongo` en clinical-service si solo usas Atlas.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: athenea-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-athenea}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-athenea_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-athenea_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: athenea-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+# Servicio de historias clinicas para Mongo Atlas
+  mongo:
+    image: mongo:7
+    container_name: athenea-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  auth-service:
+    build:
+      context: ./backend/auth-service
+    container_name: athenea-auth-service
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      NODE_ENV: development
+      PORT: 4001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-athenea}:${POSTGRES_PASSWORD:-athenea_dev}@postgres:5432/${POSTGRES_DB:-athenea_db}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev_only_change_me_minimum_16chars}
+    ports:
+      - "4001:4001"
+
+  clinical-service:
+    build:
+      context: ./backend/clinical-service
+    container_name: athenea-clinical-service
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - mongo
+    environment:
+      NODE_ENV: development
+      PORT: 4002
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev_only_change_me_minimum_16chars}
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/athenea_clinic}
+      CLINICAL_CACHE_TTL_SECONDS: ${CLINICAL_CACHE_TTL_SECONDS:-300}
+    ports:
+      - "4002:4002"
+
+  ia-service:
+    build:
+      context: ./ia-service
+    container_name: athenea-ia-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 4003
+    ports:
+      - "4003:4003"
+
+  gateway:
+    build:
+      context: ./gateway
+    container_name: athenea-gateway
+    restart: unless-stopped
+    depends_on:
+      - auth-service
+      - clinical-service
+      - ia-service
+    ports:
+      - "8080:80"
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongo_data:
