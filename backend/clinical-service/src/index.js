@@ -1,18 +1,27 @@
+require('dotenv').config();
 const express = require('express');
-const dotenv = require('dotenv');
-
-dotenv.config();
+const { conectarMongo } = require('./db');
+const historiasRouter = require('./routes/historiasR');
 
 const app = express();
+const PORT = process.env.PORT || 3002;
 
 app.use(express.json());
 
-app.get('/health', (req, res) => {
-    res.json({ status: '3002 Clinic funcionanding', servicio: 'clinical-service'});
+app.get('/health', (_req, res) => {
+  res.json({ status: 'Funcionanding', servicio: 'clinical-service' });
 });
 
-const PORT = process.env.PORT || 3002;
+app.use('/historiasR', historiasRouter);
 
-app.listen(PORT, () => {
-    console.log(`Funcionando en el puerto: ${PORT}`);
+async function main() {
+  await conectarMongo();
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Clinical-service de Mongo corriendo en el puerto ${PORT}`);
+  });
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });

@@ -5,11 +5,6 @@
 const { Pool } = require("pg");
 
 const pool = new Pool({
-  user: 'athenea',
-  host: 'postgres',
-  database: 'athenea_db',
-  password: 'athenea_dev',
-  port: 5432,
   connectionString: process.env.DATABASE_URL,
   max: 10,
 });

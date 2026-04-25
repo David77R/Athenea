@@ -12,7 +12,7 @@ const { pool, initSchema } = require("./db");
 const { getRedis } = require("./redisClient");
 
 const app = express();
-const PORT = Number(process.env.PORT || 4001);
+const PORT = Number(process.env.PORT || 3001);
 const JWT_SECRET = process.env.JWT_SECRET;
 
 app.use(cors());
