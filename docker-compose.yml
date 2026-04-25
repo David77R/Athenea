@@ -19,7 +19,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-athenea_dev}
       POSTGRES_DB: ${POSTGRES_DB:-athenea_db}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -52,12 +52,12 @@ services:
       - redis
     environment:
       NODE_ENV: development
-      PORT: 4001
+      PORT: 3001
       DATABASE_URL: postgresql://${POSTGRES_USER:-athenea}:${POSTGRES_PASSWORD:-athenea_dev}@postgres:5432/${POSTGRES_DB:-athenea_db}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev_only_change_me_minimum_16chars}
     ports:
-      - "4001:4001"
+      - "3001:3001"
 
   clinical-service:
     build:
@@ -69,13 +69,13 @@ services:
       - mongo
     environment:
       NODE_ENV: development
-      PORT: 4002
+      PORT: 3002
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev_only_change_me_minimum_16chars}
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/athenea_clinic}
       CLINICAL_CACHE_TTL_SECONDS: ${CLINICAL_CACHE_TTL_SECONDS:-300}
     ports:
-      - "4002:4002"
+      - "3002:3002"
 
   ia-service:
     build:
@@ -84,9 +84,9 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: development
-      PORT: 4003
+      PORT: 3003
     ports:
-      - "4003:4003"
+      - "3003:3003"
 
   gateway:
     build:
