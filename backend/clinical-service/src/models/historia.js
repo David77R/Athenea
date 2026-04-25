@@ -26,3 +26,5 @@ const historiaSchema = new mongoose.Schema({
     observaciones: { type: String },
     sincronizado: { type: Boolean, default:true },
 }, {timestamps: true});
+
+module.exports = mongoose.model('Historia', historiaSchema);
