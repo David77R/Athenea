@@ -5,8 +5,8 @@
   "description": "Microservicio de identidad: usuarios, roles y JWT (PostgreSQL + Redis).",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
   },
   "engines": {
     "node": ">=20"
@@ -14,10 +14,17 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.21.0",
-    "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.0",
-    "redis": "^4.7.0"
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.20.0",
+    "redis": "^4.7.1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }
