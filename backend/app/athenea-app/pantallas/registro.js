@@ -1,0 +1,244 @@
+import React, { useState } from 'react';
+import {
+  View, Text, TextInput, TouchableOpacity,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView,
+  Platform, ImageBackground, Dimensions, ScrollView
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import CONFIG from '../config';
+const { width, height } = Dimensions.get('window');
+const IMAGEN_FONDO = 'https://plus.unsplash.com/premium_photo-1661767897334-bbfbdfdc4d1a?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D';
+
+export default function RegistroScreen({ navigation }) {
+  const [nombre, setNombre] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmar, setConfirmar] = useState('');
+  const [cargando, setCargando] = useState(false);
+  const [errores, setErrores] = useState({});
+
+  function validar() {
+    const nuevosErrores = {};
+    if (!nombre || nombre.trim().length < 3) {
+      nuevosErrores.nombre = 'Nombre debe tener al menos 3 caracteres';
+    }
+    if (!email) {
+      nuevosErrores.email = 'El correo es obligatorio';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      nuevosErrores.email = 'Correo no válido';
+    }
+    if (!password) {
+      nuevosErrores.password = 'La contraseña es obligatoria';
+    } else if (password.length < 6) {
+      nuevosErrores.password = 'Mínimo 6 caracteres';
+    }
+    if (!confirmar) {
+      nuevosErrores.confirmar = 'Confirma tu contraseña';
+    } else if (confirmar !== password) {
+      nuevosErrores.confirmar = 'Las contraseñas no coinciden';
+    }
+    setErrores(nuevosErrores);
+    return Object.keys(nuevosErrores).length === 0;
+  }
+
+  async function handleRegistro() {
+    if (!validar()) return;
+    setCargando(true);
+    try {
+      const respuesta = await fetch(`${CONFIG.API_URL}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.toLowerCase().trim(),
+          password,
+        }),
+      });
+      const datos = await respuesta.json();
+      if (!respuesta.ok) {
+        setErrores({ general: datos.error || 'Error al registrar' });
+        return;
+      }
+      await AsyncStorage.setItem('token', datos.token);
+      navigation.navigate('Login');
+    } catch (e) {
+      setErrores({ general: 'Sin conexión al servidor' });
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  return (
+    <ImageBackground
+      source={{ uri: IMAGEN_FONDO }}
+      style={styles.fondo}
+      resizeMode="cover"
+    >
+      <View style={styles.overlay} />
+      <KeyboardAvoidingView
+        style={styles.contenedor}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={styles.logoArea}>
+            <View style={styles.logoExterno}>
+              <View style={styles.logoInterno}>
+                <View style={styles.pupila} />
+              </View>
+            </View>
+            <Text style={styles.titulo}>ATHENEA</Text>
+            <Text style={styles.subtitulo}>Crear cuenta</Text>
+          </View>
+
+          <View style={styles.tarjeta}>
+            <Text style={styles.bienvenida}>Registro</Text>
+
+            <View style={styles.campoContenedor}>
+              <TextInput
+                style={[styles.input, errores.nombre && styles.inputError]}
+                placeholder="Nombre completo"
+                placeholderTextColor="rgba(255,255,255,0.5)"
+                value={nombre}
+                onChangeText={(t) => {
+                  setNombre(t);
+                  setErrores((e) => ({ ...e, nombre: null }));
+                }}
+              />
+              {errores.nombre ? (
+                <Text style={styles.textoError}>{errores.nombre}</Text>
+              ) : null}
+            </View>
+
+            <View style={styles.campoContenedor}>
+              <TextInput
+                style={[styles.input, errores.email && styles.inputError]}
+                placeholder="Correo electrónico"
+                placeholderTextColor="rgba(255,255,255,0.5)"
+                value={email}
+                onChangeText={(t) => {
+                  setEmail(t);
+                  setErrores((e) => ({ ...e, email: null }));
+                }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+              {errores.email ? (
+                <Text style={styles.textoError}>{errores.email}</Text>
+              ) : null}
+            </View>
+
+            <View style={styles.campoContenedor}>
+              <TextInput
+                style={[styles.input, errores.password && styles.inputError]}
+                placeholder="Contraseña"
+                placeholderTextColor="rgba(255,255,255,0.5)"
+                value={password}
+                onChangeText={(t) => {
+                  setPassword(t);
+                  setErrores((e) => ({ ...e, password: null }));
+                }}
+                secureTextEntry
+              />
+              {errores.password ? (
+                <Text style={styles.textoError}>{errores.password}</Text>
+              ) : null}
+            </View>
+
+            <View style={styles.campoContenedor}>
+              <TextInput
+                style={[styles.input, errores.confirmar && styles.inputError]}
+                placeholder="Confirmar contraseña"
+                placeholderTextColor="rgba(255,255,255,0.5)"
+                value={confirmar}
+                onChangeText={(t) => {
+                  setConfirmar(t);
+                  setErrores((e) => ({ ...e, confirmar: null }));
+                }}
+                secureTextEntry
+              />
+              {errores.confirmar ? (
+                <Text style={styles.textoError}>{errores.confirmar}</Text>
+              ) : null}
+            </View>
+
+            {errores.general ? (
+              <Text style={styles.errorGeneral}>{errores.general}</Text>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.boton, cargando && styles.botonDesactivado]}
+              onPress={handleRegistro}
+              disabled={cargando}
+              activeOpacity={0.85}
+            >
+              {cargando ? (
+                <ActivityIndicator color="#1A237E" />
+              ) : (
+                <Text style={styles.botonTexto}>Crear cuenta</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.linkContenedor}
+              onPress={() => navigation.navigate('Login')}
+            >
+              <Text style={styles.link}>¿Ya tienes cuenta? Inicia sesión</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </ImageBackground>
+  );
+}
+
+const styles = StyleSheet.create({
+  fondo: { flex: 1, width, height },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10, 15, 60, 0.72)',
+  },
+  contenedor: { flex: 1, paddingHorizontal: 28, paddingTop: 60 },
+  logoArea: { alignItems: 'center', marginBottom: 24 },
+  logoExterno: {
+    width: 70, height: 70, borderRadius: 35,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)',
+    marginBottom: 12,
+  },
+  logoInterno: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)',
+  },
+  pupila: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#fff' },
+  titulo: {
+    fontSize: 32, fontWeight: '800', color: '#fff',
+    letterSpacing: 8, marginBottom: 4,
+  },
+  subtitulo: { fontSize: 12, color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5 },
+  tarjeta: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 24, padding: 28,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    marginBottom: 40,
+  },
+  bienvenida: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 20 },
+  campoContenedor: { marginBottom: 14 },
+  input: {
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12, padding: 14, fontSize: 15,
+    color: '#fff', backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  inputError: { borderColor: '#FF5252' },
+  textoError: { color: '#FF5252', fontSize: 12, marginTop: 4, marginLeft: 4 },
+  errorGeneral: { color: '#FF5252', fontSize: 13, textAlign: 'center', marginBottom: 12 },
+  boton: {
+    backgroundColor: '#fff', borderRadius: 12,
+    padding: 16, alignItems: 'center', marginTop: 8,
+  },
+  botonDesactivado: { opacity: 0.7 },
+  botonTexto: { color: '#1A237E', fontSize: 16, fontWeight: '700', letterSpacing: 1 },
+  linkContenedor: { alignItems: 'center', marginTop: 16 },
+  link: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
+});

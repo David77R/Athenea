@@ -10,8 +10,7 @@ import CONFIG from '../config';
 
 const { width, height } = Dimensions.get('window');
 
-const IMAGEN_FONDO = 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&q=80';
-
+const IMAGEN_FONDO = 'https://plus.unsplash.com/premium_photo-1661767897334-bbfbdfdc4d1a?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D';
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -52,7 +51,7 @@ export default function LoginScreen({ navigation }) {
         return;
       }
       await AsyncStorage.setItem('token', datos.token);
-      navigation.replace('Home');
+      navigation.navigate('Login');
     } catch (e) {
       setErrores({ general: 'Sin conexión al servidor' });
     } finally {
@@ -134,8 +133,18 @@ export default function LoginScreen({ navigation }) {
               <ActivityIndicator color="#1A237E" />
             ) : (
               <Text style={styles.botonTexto}>Entrar</Text>
+              
             )}
           </TouchableOpacity>
+
+          <TouchableOpacity
+  style={styles.linkContenedor}
+  onPress={() => navigation.navigate('Registro')}
+>
+  <Text style={styles.link}>¿No tienes cuenta? Regístrate</Text>
+</TouchableOpacity>
+
+          
         </View>
       </KeyboardAvoidingView>
     </ImageBackground>
@@ -258,4 +267,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
+
+  linkContenedor: { alignItems: 'center', marginTop: 16 },
+link: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
 });

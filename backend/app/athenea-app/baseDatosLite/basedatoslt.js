@@ -4,7 +4,7 @@ const db = SQLite.openDatabaseSync('athenea_db');
 
 export async function inicializarDB(){
     await db.execAsync(`
-        CREATE TABLE IF IT NOT EXISTS historias_pendientes(
+        CREATE TABLE IF NOT EXISTS historias_pendientes(
         id TEXT PRIMARY KEY,
         datos TEXT NOT NULL,
         sincronizado INTEGER DEFAULT 0,
