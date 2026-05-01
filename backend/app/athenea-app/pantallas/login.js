@@ -5,17 +5,17 @@ import {
   Platform, ImageBackground, Dimensions
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import CONFIG from '../config';
 
 const { width, height } = Dimensions.get('window');
-
 const IMAGEN_FONDO = 'https://plus.unsplash.com/premium_photo-1661767897334-bbfbdfdc4d1a?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D';
-export default function LoginScreen({ navigation }) {
+
+export default function LoginScreen({ navigation, setToken }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [cargando, setCargando] = useState(false);
   const [errores, setErrores] = useState({});
+  const [verPassword, setVerPassword] = useState(false);
 
   function validar() {
     const nuevosErrores = {};
@@ -51,7 +51,7 @@ export default function LoginScreen({ navigation }) {
         return;
       }
       await AsyncStorage.setItem('token', datos.token);
-      navigation.navigate('Login');
+      setToken(datos.token);
     } catch (e) {
       setErrores({ general: 'Sin conexión al servidor' });
     } finally {
@@ -66,7 +66,6 @@ export default function LoginScreen({ navigation }) {
       resizeMode="cover"
     >
       <View style={styles.overlay} />
-
       <KeyboardAvoidingView
         style={styles.contenedor}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -78,16 +77,17 @@ export default function LoginScreen({ navigation }) {
             </View>
           </View>
           <Text style={styles.titulo}>ATHENEA</Text>
-          <Text style={styles.subtitulo}>Historias Clínicas Optométricas</Text>
+          <Text style={styles.subtitulo}>Su asistente de optometría</Text>
         </View>
 
         <View style={styles.tarjeta}>
           <Text style={styles.bienvenida}>Iniciar sesión</Text>
 
+          {/* Campo email */}
           <View style={styles.campoContenedor}>
             <TextInput
               style={[styles.input, errores.email && styles.inputError]}
-              placeholder="Correo electrónico"
+              placeholder="Usuario o correo electrónico"
               placeholderTextColor="rgba(255,255,255,0.5)"
               value={email}
               onChangeText={(t) => {
@@ -102,18 +102,27 @@ export default function LoginScreen({ navigation }) {
             ) : null}
           </View>
 
+          {/* Campo contraseña con ojito */}
           <View style={styles.campoContenedor}>
-            <TextInput
-              style={[styles.input, errores.password && styles.inputError]}
-              placeholder="Contraseña"
-              placeholderTextColor="rgba(255,255,255,0.5)"
-              value={password}
-              onChangeText={(t) => {
-                setPassword(t);
-                setErrores((e) => ({ ...e, password: null }));
-              }}
-              secureTextEntry
-            />
+            <View style={styles.inputContenedor}>
+              <TextInput
+                style={[styles.input, styles.inputFlex, errores.password && styles.inputError]}
+                placeholder="Contraseña"
+                placeholderTextColor="rgba(255,255,255,0.5)"
+                value={password}
+                onChangeText={(t) => {
+                  setPassword(t);
+                  setErrores((e) => ({ ...e, password: null }));
+                }}
+                secureTextEntry={!verPassword}
+              />
+              <TouchableOpacity
+                style={styles.ojito}
+                onPress={() => setVerPassword(!verPassword)}
+              >
+                <Text style={styles.ojitoTexto}>{verPassword ? '🙈' : '👁️'}</Text>
+              </TouchableOpacity>
+            </View>
             {errores.password ? (
               <Text style={styles.textoError}>{errores.password}</Text>
             ) : null}
@@ -132,19 +141,16 @@ export default function LoginScreen({ navigation }) {
             {cargando ? (
               <ActivityIndicator color="#1A237E" />
             ) : (
-              <Text style={styles.botonTexto}>Entrar</Text>
-              
+              <Text style={styles.botonTexto}>Iniciar sesión</Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity
-  style={styles.linkContenedor}
-  onPress={() => navigation.navigate('Registro')}
->
-  <Text style={styles.link}>¿No tienes cuenta? Regístrate</Text>
-</TouchableOpacity>
-
-          
+            style={styles.linkContenedor}
+            onPress={() => navigation.navigate('Registro')}
+          >
+            <Text style={styles.link}>¿No tienes cuenta? Regístrate</Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </ImageBackground>
@@ -152,11 +158,7 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  fondo: {
-    flex: 1,
-    width,
-    height,
-  },
+  fondo: { flex: 1, width, height },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(10, 15, 60, 0.72)',
@@ -168,106 +170,58 @@ const styles = StyleSheet.create({
     paddingTop: 80,
     paddingBottom: 48,
   },
-  logoArea: {
-    alignItems: 'center',
-  },
+  logoArea: { alignItems: 'center' },
   logoExterno: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 80, height: 80, borderRadius: 40,
     backgroundColor: 'rgba(255,255,255,0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.25)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)',
     marginBottom: 16,
   },
   logoInterno: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 50, height: 50, borderRadius: 25,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.4)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)',
   },
-  pupila: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-  },
+  pupila: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
   titulo: {
-    fontSize: 38,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: 8,
-    marginBottom: 6,
+    fontSize: 38, fontWeight: '800', color: '#fff',
+    letterSpacing: 8, marginBottom: 6,
   },
   subtitulo: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.6)',
-    letterSpacing: 1.5,
-    textAlign: 'center',
+    fontSize: 12, color: 'rgba(255,255,255,0.6)',
+    letterSpacing: 1.5, textAlign: 'center',
   },
   tarjeta: {
     backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 24,
-    padding: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 24, padding: 28,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
   },
-  bienvenida: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 24,
-  },
-  campoContenedor: {
-    marginBottom: 16,
-  },
+  bienvenida: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 24 },
+  campoContenedor: { marginBottom: 16 },
   input: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    color: '#fff',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12, padding: 14, fontSize: 15,
+    color: '#fff', backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  inputError: {
-    borderColor: '#FF5252',
+  inputContenedor: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  textoError: {
-    color: '#FF5252',
-    fontSize: 12,
-    marginTop: 4,
-    marginLeft: 4,
-  },
-  errorGeneral: {
-    color: '#FF5252',
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
+  inputFlex: { flex: 1, borderWidth: 0 },
+  ojito: { paddingHorizontal: 14, paddingVertical: 14 },
+  ojitoTexto: { fontSize: 18 },
+  inputError: { borderColor: '#FF5252' },
+  textoError: { color: '#FF5252', fontSize: 12, marginTop: 4, marginLeft: 4 },
+  errorGeneral: { color: '#FF5252', fontSize: 13, textAlign: 'center', marginBottom: 12 },
   boton: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
+    backgroundColor: '#fff', borderRadius: 12,
+    padding: 16, alignItems: 'center', marginTop: 8,
   },
-  botonDesactivado: {
-    opacity: 0.7,
-  },
-  botonTexto: {
-    color: '#1A237E',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-
+  botonDesactivado: { opacity: 0.7 },
+  botonTexto: { color: '#1A237E', fontSize: 16, fontWeight: '700', letterSpacing: 1 },
   linkContenedor: { alignItems: 'center', marginTop: 16 },
-link: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
+  link: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
 });

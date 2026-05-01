@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import LoginScreen from '../pantallas/login';
 import HomeScreen from '../pantallas/home';
 import RegistroScreen from '../pantallas/registro';
+import FormularioScreen from '../pantallas/formulario';
 
 const Stack = createNativeStackNavigator();
 
@@ -26,17 +27,25 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer>
-     <Stack.Navigator screenOptions={{ headerShown: false }}>
-  {token ? (
-    <Stack.Screen name="Home" component={HomeScreen} />
-  ) : (
-    <>
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Registro" component={RegistroScreen} />
-    </>
-  )}
-</Stack.Navigator>
-      
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {token ? (
+          <>
+            <Stack.Screen name="Home">
+              {(props) => <HomeScreen {...props} setToken={setToken} />}
+            </Stack.Screen>
+            <Stack.Screen name="Formulario" component={FormularioScreen} />
+          </>
+        ) : (
+          <>
+            <Stack.Screen name="Login">
+              {(props) => <LoginScreen {...props} setToken={setToken} />}
+            </Stack.Screen>
+            <Stack.Screen name="Registro">
+              {(props) => <RegistroScreen {...props} setToken={setToken} />}
+            </Stack.Screen>
+          </>
+        )}
+      </Stack.Navigator>
     </NavigationContainer>
   );
 }

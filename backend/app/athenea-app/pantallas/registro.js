@@ -6,16 +6,19 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CONFIG from '../config';
+
 const { width, height } = Dimensions.get('window');
 const IMAGEN_FONDO = 'https://plus.unsplash.com/premium_photo-1661767897334-bbfbdfdc4d1a?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D';
 
-export default function RegistroScreen({ navigation }) {
+export default function RegistroScreen({ navigation, setToken }) {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmar, setConfirmar] = useState('');
   const [cargando, setCargando] = useState(false);
   const [errores, setErrores] = useState({});
+  const [verPassword, setVerPassword] = useState(false);
+  const [verConfirmar, setVerConfirmar] = useState(false);
 
   function validar() {
     const nuevosErrores = {};
@@ -59,7 +62,8 @@ export default function RegistroScreen({ navigation }) {
         return;
       }
       await AsyncStorage.setItem('token', datos.token);
-      navigation.navigate('Login');
+      setToken(datos.token);
+      await AsyncStorage.setItem('nombre', nombre);
     } catch (e) {
       setErrores({ general: 'Sin conexión al servidor' });
     } finally {
@@ -92,6 +96,7 @@ export default function RegistroScreen({ navigation }) {
           <View style={styles.tarjeta}>
             <Text style={styles.bienvenida}>Registro</Text>
 
+            {/* Nombre */}
             <View style={styles.campoContenedor}>
               <TextInput
                 style={[styles.input, errores.nombre && styles.inputError]}
@@ -103,11 +108,10 @@ export default function RegistroScreen({ navigation }) {
                   setErrores((e) => ({ ...e, nombre: null }));
                 }}
               />
-              {errores.nombre ? (
-                <Text style={styles.textoError}>{errores.nombre}</Text>
-              ) : null}
+              {errores.nombre ? <Text style={styles.textoError}>{errores.nombre}</Text> : null}
             </View>
 
+            {/* Email */}
             <View style={styles.campoContenedor}>
               <TextInput
                 style={[styles.input, errores.email && styles.inputError]}
@@ -121,43 +125,55 @@ export default function RegistroScreen({ navigation }) {
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-              {errores.email ? (
-                <Text style={styles.textoError}>{errores.email}</Text>
-              ) : null}
+              {errores.email ? <Text style={styles.textoError}>{errores.email}</Text> : null}
             </View>
 
+            {/* Contraseña */}
             <View style={styles.campoContenedor}>
-              <TextInput
-                style={[styles.input, errores.password && styles.inputError]}
-                placeholder="Contraseña"
-                placeholderTextColor="rgba(255,255,255,0.5)"
-                value={password}
-                onChangeText={(t) => {
-                  setPassword(t);
-                  setErrores((e) => ({ ...e, password: null }));
-                }}
-                secureTextEntry
-              />
-              {errores.password ? (
-                <Text style={styles.textoError}>{errores.password}</Text>
-              ) : null}
+              <View style={styles.inputContenedor}>
+                <TextInput
+                  style={[styles.inputFlex, errores.password && styles.inputError]}
+                  placeholder="Contraseña"
+                  placeholderTextColor="rgba(255,255,255,0.5)"
+                  value={password}
+                  onChangeText={(t) => {
+                    setPassword(t);
+                    setErrores((e) => ({ ...e, password: null }));
+                  }}
+                  secureTextEntry={!verPassword}
+                />
+                <TouchableOpacity
+                  style={styles.ojito}
+                  onPress={() => setVerPassword(!verPassword)}
+                >
+                  <Text style={styles.ojitoTexto}>{verPassword ? '🙈' : '👁️'}</Text>
+                </TouchableOpacity>
+              </View>
+              {errores.password ? <Text style={styles.textoError}>{errores.password}</Text> : null}
             </View>
 
+            {/* Confirmar contraseña */}
             <View style={styles.campoContenedor}>
-              <TextInput
-                style={[styles.input, errores.confirmar && styles.inputError]}
-                placeholder="Confirmar contraseña"
-                placeholderTextColor="rgba(255,255,255,0.5)"
-                value={confirmar}
-                onChangeText={(t) => {
-                  setConfirmar(t);
-                  setErrores((e) => ({ ...e, confirmar: null }));
-                }}
-                secureTextEntry
-              />
-              {errores.confirmar ? (
-                <Text style={styles.textoError}>{errores.confirmar}</Text>
-              ) : null}
+              <View style={styles.inputContenedor}>
+                <TextInput
+                  style={[styles.inputFlex, errores.confirmar && styles.inputError]}
+                  placeholder="Confirmar contraseña"
+                  placeholderTextColor="rgba(255,255,255,0.5)"
+                  value={confirmar}
+                  onChangeText={(t) => {
+                    setConfirmar(t);
+                    setErrores((e) => ({ ...e, confirmar: null }));
+                  }}
+                  secureTextEntry={!verConfirmar}
+                />
+                <TouchableOpacity
+                  style={styles.ojito}
+                  onPress={() => setVerConfirmar(!verConfirmar)}
+                >
+                  <Text style={styles.ojitoTexto}>{verConfirmar ? '🙈' : '👁️'}</Text>
+                </TouchableOpacity>
+              </View>
+              {errores.confirmar ? <Text style={styles.textoError}>{errores.confirmar}</Text> : null}
             </View>
 
             {errores.general ? (
@@ -230,6 +246,20 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 14, fontSize: 15,
     color: '#fff', backgroundColor: 'rgba(255,255,255,0.08)',
   },
+  inputContenedor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  inputFlex: {
+    flex: 1,
+    padding: 14,
+    fontSize: 15,
+    color: '#fff',
+  },
   inputError: { borderColor: '#FF5252' },
   textoError: { color: '#FF5252', fontSize: 12, marginTop: 4, marginLeft: 4 },
   errorGeneral: { color: '#FF5252', fontSize: 13, textAlign: 'center', marginBottom: 12 },
@@ -241,4 +271,6 @@ const styles = StyleSheet.create({
   botonTexto: { color: '#1A237E', fontSize: 16, fontWeight: '700', letterSpacing: 1 },
   linkContenedor: { alignItems: 'center', marginTop: 16 },
   link: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
+  ojito: { paddingHorizontal: 14, paddingVertical: 14 },
+  ojitoTexto: { fontSize: 18 },
 });
