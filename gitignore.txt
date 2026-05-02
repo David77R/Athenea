@@ -1,0 +1,30 @@
+# Dependencias
+node_modules/
+**/node_modules/
+
+# Entornos y secretos (nunca subir credenciales reales)
+.env
+.env.local
+**/.env
+
+# Expo / React Native
+.expo/
+dist/
+web-build/
+
+# Logs y cobertura
+npm-debug.log*
+coverage/
+*.log
+
+# SO / IDE
+.DS_Store
+Thumbs.db
+
+# Archivos temporales de Office (bloqueo al abrir .docx)
+~$*
+.idea/
+.vscode/
+
+# Docker overrides locales
+docker-compose.override.yml
