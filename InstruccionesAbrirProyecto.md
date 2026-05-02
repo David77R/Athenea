@@ -23,6 +23,8 @@
 ### 1. Clonar el repositorio
 
 ```bash
+git clone -b frontend  https://github.com/David77R/Athenea.git
+npm install
 git clone https://github.com/David77R/Athenea.git
 cd Athenea/backend
 ```

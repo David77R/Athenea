@@ -13,3 +13,11 @@ node -v v24.14.1
 
 - Se creó .gitignore para evitar subir node_modules y archivos .env al repositorio
 - No se hará hardcoding de contraseñas en ningún servicio
+
+### transcribir.py
+
+Script Python que actúa como puente entre Node.js y Vosk.
+Procesa audio WAV en bloques de 4000 frames para no saturar
+la memoria del servidor. Vosk usa el algoritmo Kaldi internamente,
+el mismo usado en sistemas de reconocimiento de voz profesionales.
+El resultado se imprime en stdout y Node.js lo captura via IPC.

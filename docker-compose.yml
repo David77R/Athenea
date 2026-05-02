@@ -79,7 +79,7 @@ services:
 
   ia-service:
     build:
-      context: ./ia-service
+      context: ./backend/ia-service
     container_name: athenea-ia-service
     restart: unless-stopped
     environment:
@@ -90,7 +90,7 @@ services:
 
   gateway:
     build:
-      context: ./gateway
+      context: ./backend/gateway
     container_name: athenea-gateway
     restart: unless-stopped
     depends_on:

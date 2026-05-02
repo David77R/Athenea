@@ -1,3 +1,6 @@
 # Dependencias
 node_modules/
 **/node_modules/
+
+ia-service/model/
+ia-service/uploads/
