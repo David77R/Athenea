@@ -66,7 +66,9 @@ export default function HomeScreen({ navigation, setToken }) {
             <Text style={styles.tarjetaTexto}>Mi{'\n'}perfil</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.tarjeta}>
+          <TouchableOpacity style={styles.tarjeta}
+            onPress={() => navigation.navigate('Grabacion')}
+            >
             <Text style={styles.tarjetaIcono}>🎙️</Text>
             <Text style={styles.tarjetaTexto}>Registro{'\n'}por voz</Text>
           </TouchableOpacity>

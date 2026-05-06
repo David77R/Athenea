@@ -4,7 +4,6 @@ import {
   TouchableOpacity, Switch, KeyboardAvoidingView, Platform, Alert
 } from 'react-native';
 
-// ── PASOS DEL WIZARD ──────────────────────────
 const PASOS = ['Paciente', 'Anamnesis', 'Examen', 'Diagnóstico'];
 
 export default function FormularioScreen({ route, navigation }) {
@@ -12,27 +11,24 @@ export default function FormularioScreen({ route, navigation }) {
 
   const [pasoActual, setPasoActual] = useState(0);
 
-  // ── BLOQUE 1: Paciente ──────────────────────
-  const [nombre, setNombre]               = useState('');
-  const [cedula, setCedula]               = useState('');
-  const [fechaNac, setFechaNac]           = useState('');
-  const [edad, setEdad]                   = useState('');
-  const [telefono, setTelefono]           = useState('');
-  const [ocupacion, setOcupacion]         = useState('');
-  const nroHistoria                       = `HC-${Date.now()}`;
-  const fechaConsulta                     = new Date().toLocaleDateString('es-ES');
+  const [nombre, setNombre]             = useState('');
+  const [cedula, setCedula]             = useState('');
+  const [fechaNac, setFechaNac]         = useState('');
+  const [edad, setEdad]                 = useState('');
+  const [telefono, setTelefono]         = useState('');
+  const [ocupacion, setOcupacion]       = useState('');
+  const nroHistoria                     = `HC-${Date.now()}`;
+  const fechaConsulta                   = new Date().toLocaleDateString('es-ES');
 
-  // ── BLOQUE 2: Anamnesis ─────────────────────
-  const [motivo, setMotivo]               = useState('');
-  const [tiempoEvolucion, setTiempoEvo]  = useState('');
+  const [motivo, setMotivo]             = useState('');
+  const [tiempoEvolucion, setTiempoEvo] = useState('');
   const [antOcularPersonal, setAntOcPer] = useState('');
   const [antOcularFamiliar, setAntOcFam] = useState('');
-  const [antMedicos, setAntMed]          = useState('');
-  const [usaLentes, setUsaLentes]        = useState(false);
-  const [tipoLentes, setTipoLentes]      = useState('');
-  const [medicamentos, setMedicamentos]  = useState('');
+  const [antMedicos, setAntMed]         = useState('');
+  const [usaLentes, setUsaLentes]       = useState(false);
+  const [tipoLentes, setTipoLentes]     = useState('');
+  const [medicamentos, setMedicamentos] = useState('');
 
-  // ── BLOQUE 3: Examen Visual ─────────────────
   const [avscOD, setAvscOD] = useState('');
   const [avscOI, setAvscOI] = useState('');
   const [avccOD, setAvccOD] = useState('');
@@ -50,30 +46,25 @@ export default function FormularioScreen({ route, navigation }) {
   const [ishaOD, setIshaOD] = useState('');
   const [ishaOI, setIshaOI] = useState('');
 
-  // ── BLOQUE 4: Diagnóstico (solo especialista)
-  const [observaciones, setObservaciones]   = useState('');
-  const [diagPrincipal, setDiagPrincipal]   = useState('');
-  const [diagSecundario, setDiagSecundario] = useState('');
-  const [prescripcion, setPrescripcion]     = useState('');
-  const [proximaCita, setProximaCita]       = useState('');
+  const [diagPrincipal, setDiagPrincipal]     = useState('');
+  const [diagSecundario, setDiagSecundario]   = useState('');
+  const [prescripcion, setPrescripcion]       = useState('');
+  const [proximaCita, setProximaCita]         = useState('');
+  const [observaciones, setObservaciones]     = useState('');
 
-  // ── AUTO-FILL desde IA (tu lógica original expandida) ──
   useEffect(() => {
     if (datosIA) {
       setMotivo(datosIA.narrative || '');
-      setObservaciones(datosIA.observations || '');
+      setTiempoEvo(datosIA.tiempoEvolucion || '');
 
-      // Agudeza visual si viene del dictado
       if (datosIA.visualAcuity) {
         setAvscOD(datosIA.visualAcuity.od || '');
         setAvscOI(datosIA.visualAcuity.oi || '');
       }
-      // Presión intraocular
       if (datosIA.intraocularPressure) {
         setPioOD(datosIA.intraocularPressure.od || '');
         setPioOI(datosIA.intraocularPressure.oi || '');
       }
-      // Refracción
       if (datosIA.refraccion) {
         setEsfOD(datosIA.refraccion.esf_od || '');
         setEsfOI(datosIA.refraccion.esf_oi || '');
@@ -82,7 +73,6 @@ export default function FormularioScreen({ route, navigation }) {
         setEjeOD(datosIA.refraccion.eje_od || '');
         setEjeOI(datosIA.refraccion.eje_oi || '');
       }
-      // Datos del paciente si los dictó
       if (datosIA.paciente) {
         setNombre(datosIA.paciente.nombre || '');
         setCedula(datosIA.paciente.cedula || '');
@@ -94,23 +84,20 @@ export default function FormularioScreen({ route, navigation }) {
 
   const guardar = () => {
     const historia = {
-      paciente:   { nombre, cedula, fechaNac, edad, telefono, ocupacion, fechaConsulta, nroHistoria },
-      anamnesis:  { motivo, tiempoEvolucion, antOcularPersonal, antOcularFamiliar, antMedicos, usaLentes, tipoLentes, medicamentos },
-      examen:     { avscOD, avscOI, avccOD, avccOI, esfOD, esfOI, cilOD, cilOI, ejeOD, ejeOI, addOD, addOI, pioOD, pioOI, ishaOD, ishaOI },
-      diagnostico:{ diagPrincipal, diagSecundario, prescripcion, proximaCita, observaciones },
+      paciente:    { nombre, cedula, fechaNac, edad, telefono, ocupacion, fechaConsulta, nroHistoria },
+      anamnesis:   { motivo, tiempoEvolucion, antOcularPersonal, antOcularFamiliar, antMedicos, usaLentes, tipoLentes, medicamentos },
+      examen:      { avscOD, avscOI, avccOD, avccOI, esfOD, esfOI, cilOD, cilOI, ejeOD, ejeOI, addOD, addOI, pioOD, pioOI, ishaOD, ishaOI },
+      diagnostico: { diagPrincipal, diagSecundario, prescripcion, proximaCita, observaciones },
       sincronizado: 0,
     };
-    // TODO: insertar en SQLite → basedatoslt.js
     console.log('Historia a guardar:', JSON.stringify(historia, null, 2));
-    Alert.alert('✅ Guardado', 'Historia clínica guardada.\nSe sincronizará cuando haya conexión.',
+    Alert.alert('Guardado', 'Historia clínica guardada correctamente.',
       [{ text: 'OK', onPress: () => navigation.navigate('Home') }]);
   };
 
-  // ── RENDER DE CADA PASO ──────────────────────
   const renderPaso = () => {
     switch (pasoActual) {
 
-      // ════ PASO 0 — DATOS DEL PACIENTE ════
       case 0:
         return (
           <View>
@@ -150,19 +137,12 @@ export default function FormularioScreen({ route, navigation }) {
           </View>
         );
 
-      // ════ PASO 1 — ANAMNESIS ════
       case 1:
         return (
           <View>
-            {datosIA?.narrative && <BannerIA texto="Motivo de consulta pre-rellenado por IA" />}
-
             <Text style={styles.label}>Motivo de consulta *</Text>
-            <TextInput
-              style={[styles.input, styles.inputMultilinea, datosIA?.narrative && styles.inputIA]}
-              placeholder="¿Por qué consulta el paciente?"
-              value={motivo} onChangeText={setMotivo}
-              multiline numberOfLines={4}
-            />
+            <TextInput style={[styles.input, styles.inputMultilinea]} placeholder="¿Por qué consulta el paciente?"
+              value={motivo} onChangeText={setMotivo} multiline numberOfLines={4} />
 
             <Text style={styles.label}>Tiempo de evolución</Text>
             <TextInput style={styles.input} placeholder="Ej: 2 semanas, 1 mes..." value={tiempoEvolucion} onChangeText={setTiempoEvo} />
@@ -199,26 +179,21 @@ export default function FormularioScreen({ route, navigation }) {
           </View>
         );
 
-      // ════ PASO 2 — EXAMEN VISUAL ════
       case 2:
         return (
           <View>
-            {/* AVSC */}
             <Text style={styles.subtitulo}>Agudeza Visual Sin Corrección (AVSC)</Text>
             <View style={styles.rowCampos}>
               <View style={[styles.campoMitad, { marginRight: 8 }]}>
                 <Text style={styles.labelOD}>OD</Text>
-                <TextInput style={[styles.input, datosIA?.visualAcuity?.od && styles.inputIA]}
-                  placeholder="20/__" value={avscOD} onChangeText={setAvscOD} />
+                <TextInput style={styles.input} placeholder="20/__" value={avscOD} onChangeText={setAvscOD} />
               </View>
               <View style={styles.campoMitad}>
                 <Text style={styles.labelOI}>OI</Text>
-                <TextInput style={[styles.input, datosIA?.visualAcuity?.oi && styles.inputIA]}
-                  placeholder="20/__" value={avscOI} onChangeText={setAvscOI} />
+                <TextInput style={styles.input} placeholder="20/__" value={avscOI} onChangeText={setAvscOI} />
               </View>
             </View>
 
-            {/* AVCC */}
             <Text style={styles.subtitulo}>Agudeza Visual Con Corrección (AVCC)</Text>
             <View style={styles.rowCampos}>
               <View style={[styles.campoMitad, { marginRight: 8 }]}>
@@ -231,7 +206,6 @@ export default function FormularioScreen({ route, navigation }) {
               </View>
             </View>
 
-            {/* REFRACCIÓN */}
             <Text style={styles.subtitulo}>Refracción</Text>
             <View style={styles.tablaRefraccion}>
               <View style={[styles.tablaFila, styles.tablaEncabezado]}>
@@ -240,10 +214,10 @@ export default function FormularioScreen({ route, navigation }) {
                 <Text style={[styles.tablaCelda, styles.tablaOI]}>OI</Text>
               </View>
               {[
-                { label: 'Esférico',  valOD: esfOD, setOD: setEsfOD, valOI: esfOI, setOI: setEsfOI, ph: '+/- 0.00' },
-                { label: 'Cilíndrico',valOD: cilOD, setOD: setCilOD, valOI: cilOI, setOI: setCilOI, ph: '+/- 0.00' },
-                { label: 'Eje',       valOD: ejeOD, setOD: setEjeOD, valOI: ejeOI, setOI: setEjeOI, ph: '0°–180°'  },
-                { label: 'ADD',       valOD: addOD, setOD: setAddOD, valOI: addOI, setOI: setAddOI, ph: '0.00'     },
+                { label: 'Esférico',   valOD: esfOD, setOD: setEsfOD, valOI: esfOI, setOI: setEsfOI, ph: '+/- 0.00' },
+                { label: 'Cilíndrico', valOD: cilOD, setOD: setCilOD, valOI: cilOI, setOI: setCilOI, ph: '+/- 0.00' },
+                { label: 'Eje',        valOD: ejeOD, setOD: setEjeOD, valOI: ejeOI, setOI: setEjeOI, ph: '0°–180°'  },
+                { label: 'ADD',        valOD: addOD, setOD: setAddOD, valOI: addOI, setOI: setAddOI, ph: '0.00'     },
               ].map(({ label, valOD, setOD, valOI, setOI, ph }) => (
                 <View key={label} style={[styles.tablaFila, styles.tablaFilaDatos]}>
                   <Text style={[styles.tablaCelda, styles.tablaCeldaLabel]}>{label}</Text>
@@ -255,22 +229,18 @@ export default function FormularioScreen({ route, navigation }) {
               ))}
             </View>
 
-            {/* PIO */}
             <Text style={styles.subtitulo}>Presión Intraocular (PIO)</Text>
             <View style={styles.rowCampos}>
               <View style={[styles.campoMitad, { marginRight: 8 }]}>
                 <Text style={styles.labelOD}>OD</Text>
-                <TextInput style={[styles.input, datosIA?.intraocularPressure?.od && styles.inputIA]}
-                  placeholder="mmHg" keyboardType="decimal-pad" value={pioOD} onChangeText={setPioOD} />
+                <TextInput style={styles.input} placeholder="mmHg" keyboardType="decimal-pad" value={pioOD} onChangeText={setPioOD} />
               </View>
               <View style={styles.campoMitad}>
                 <Text style={styles.labelOI}>OI</Text>
-                <TextInput style={[styles.input, datosIA?.intraocularPressure?.oi && styles.inputIA]}
-                  placeholder="mmHg" keyboardType="decimal-pad" value={pioOI} onChangeText={setPioOI} />
+                <TextInput style={styles.input} placeholder="mmHg" keyboardType="decimal-pad" value={pioOI} onChangeText={setPioOI} />
               </View>
             </View>
 
-            {/* ISHIHARA */}
             <Text style={styles.subtitulo}>Visión de Color (Ishihara)</Text>
             <View style={styles.rowCampos}>
               <View style={[styles.campoMitad, { marginRight: 8 }]}>
@@ -285,13 +255,12 @@ export default function FormularioScreen({ route, navigation }) {
           </View>
         );
 
-      // ════ PASO 3 — DIAGNÓSTICO (solo especialista) ════
       case 3:
         return (
           <View>
             <View style={styles.badgeEspecialista}>
               <Text style={styles.badgeEspecialistaTexto}>
-                🔒 Esta sección es exclusiva del especialista · La IA no interviene aquí
+                🔒 Sección exclusiva del especialista
               </Text>
             </View>
 
@@ -310,15 +279,13 @@ export default function FormularioScreen({ route, navigation }) {
             <Text style={styles.label}>Próxima cita</Text>
             <TextInput style={styles.input} placeholder="DD/MM/AAAA" value={proximaCita} onChangeText={setProximaCita} />
 
-            {/* Observaciones — tu campo original */}
-            <Text style={styles.label}>Observaciones adicionales</Text>
+            <Text style={styles.label}>Observaciones</Text>
             <TextInput style={[styles.input, styles.inputMultilinea]} placeholder="Observaciones, recomendaciones..."
               value={observaciones} onChangeText={setObservaciones} multiline numberOfLines={4} />
 
-            {/* Texto IA debug — tu campo original */}
             {textoIA ? (
               <>
-                <Text style={[styles.label, { marginTop: 16, color: '#999' }]}>Texto capturado por IA:</Text>
+                <Text style={[styles.label, { marginTop: 16, color: '#999' }]}>Texto capturado:</Text>
                 <Text style={styles.textoIA}>{textoIA}</Text>
               </>
             ) : null}
@@ -329,8 +296,6 @@ export default function FormularioScreen({ route, navigation }) {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-
-      {/* BARRA DE PASOS */}
       <View style={styles.barraWizard}>
         {PASOS.map((nombre, index) => (
           <React.Fragment key={index}>
@@ -354,7 +319,6 @@ export default function FormularioScreen({ route, navigation }) {
         {renderPaso()}
       </ScrollView>
 
-      {/* BOTONES NAVEGACIÓN */}
       <View style={styles.botones}>
         {pasoActual > 0 && (
           <TouchableOpacity style={styles.btnAnterior} onPress={() => setPasoActual(p => p - 1)}>
@@ -375,74 +339,48 @@ export default function FormularioScreen({ route, navigation }) {
   );
 }
 
-// ── SUBCOMPONENTES PEQUEÑOS ──────────────────
-function BannerIA({ texto }) {
-  return (
-    <View style={styles.bannerIA}>
-      <Text style={styles.bannerIATexto}>⚡ {texto}</Text>
-    </View>
-  );
-}
-
-// ── ESTILOS ──────────────────────────────────
 const styles = StyleSheet.create({
-  // Tus estilos originales
-  container:        { padding: 20, paddingBottom: 100 },
-  title:            { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
-  label:            { fontWeight: 'bold', marginTop: 10 },
-  input:            { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 5, marginTop: 5 },
-  textoIA:          { marginTop: 10, fontStyle: 'italic', color: '#666' },
-
-  // Nuevos estilos
-  inputDesactivado: { backgroundColor: '#f4f4f4', color: '#999' },
-  inputMultilinea:  { height: 80, textAlignVertical: 'top' },
-  inputIA:          { borderColor: '#90CAF9', backgroundColor: '#F0F7FF' },
-  subtitulo:        { fontWeight: 'bold', marginTop: 16, marginBottom: 4, color: '#3D5AFE', fontSize: 13 },
-  labelOD:          { fontWeight: 'bold', color: '#1565C0', marginTop: 10 },
-  labelOI:          { fontWeight: 'bold', color: '#C62828', marginTop: 10 },
-  rowCampos:        { flexDirection: 'row', marginTop: 0 },
-  campoMitad:       { flex: 1 },
-  switchFila:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
-
-  // Tabla refracción
-  tablaRefraccion:    { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, marginTop: 5, overflow: 'hidden' },
-  tablaFila:          { flexDirection: 'row' },
-  tablaEncabezado:    { backgroundColor: '#f5f5f5' },
-  tablaFilaDatos:     { borderTopWidth: 1, borderTopColor: '#eee' },
-  tablaCelda:         { flex: 1, padding: 8, textAlign: 'center' },
-  tablaCeldaLabel:    { fontWeight: 'bold', color: '#555', fontSize: 12 },
-  tablaOD:            { fontWeight: 'bold', color: '#1565C0' },
-  tablaOI:            { fontWeight: 'bold', color: '#C62828' },
-  tablaCeldaInput:    { borderLeftWidth: 1, borderLeftColor: '#eee', fontSize: 13, textAlign: 'center' },
-  tablaCeldaInputOI:  { borderLeftWidth: 1, borderLeftColor: '#eee' },
-
-  // Badge especialista
-  badgeEspecialista:      { backgroundColor: '#FFF3E0', padding: 12, borderRadius: 8, marginBottom: 10 },
-  badgeEspecialistaTexto: { color: '#E65100', fontWeight: 'bold', fontSize: 13 },
-
-  // Banner IA
-  bannerIA:      { backgroundColor: '#E3F2FD', padding: 8, borderRadius: 6, marginBottom: 8 },
-  bannerIATexto: { color: '#1565C0', fontSize: 12, fontWeight: '600' },
-
-  // Wizard
-  barraWizard:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  paso:             { alignItems: 'center' },
-  circuloPaso:      { width: 28, height: 28, borderRadius: 14, backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center' },
-  circuloActivo:    { backgroundColor: '#3D5AFE' },
-  circuloListo:     { backgroundColor: '#00C853' },
-  numeroPaso:       { fontSize: 12, color: '#999', fontWeight: 'bold' },
-  numeroPasoActivo: { color: '#fff' },
-  nombrePaso:       { fontSize: 9, color: '#aaa', marginTop: 3 },
-  nombrePasoActivo: { color: '#3D5AFE', fontWeight: 'bold' },
-  lineaPaso:        { flex: 1, height: 2, backgroundColor: '#eee', marginBottom: 12 },
-  lineaPasoActiva:  { backgroundColor: '#3D5AFE' },
-
-  // Botones
-  botones:            { flexDirection: 'row', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
-  btnAnterior:        { paddingVertical: 12, paddingHorizontal: 20, borderWidth: 1, borderColor: '#3D5AFE', borderRadius: 8 },
-  btnAnteriorTexto:   { color: '#3D5AFE', fontWeight: 'bold' },
-  btnSiguiente:       { paddingVertical: 12, paddingHorizontal: 24, backgroundColor: '#3D5AFE', borderRadius: 8, marginLeft: 'auto' },
-  btnSiguienteTexto:  { color: '#fff', fontWeight: 'bold' },
-  btnGuardar:         { flex: 1, paddingVertical: 12, backgroundColor: '#00C853', borderRadius: 8, alignItems: 'center' },
-  btnGuardarTexto:    { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  container:             { padding: 20, paddingBottom: 100 },
+  title:                 { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
+  label:                 { fontWeight: 'bold', marginTop: 10 },
+  input:                 { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 5, marginTop: 5 },
+  textoIA:               { marginTop: 10, fontStyle: 'italic', color: '#666' },
+  inputDesactivado:      { backgroundColor: '#f4f4f4', color: '#999' },
+  inputMultilinea:       { height: 80, textAlignVertical: 'top' },
+  subtitulo:             { fontWeight: 'bold', marginTop: 16, marginBottom: 4, color: '#3D5AFE', fontSize: 13 },
+  labelOD:               { fontWeight: 'bold', color: '#1565C0', marginTop: 10 },
+  labelOI:               { fontWeight: 'bold', color: '#C62828', marginTop: 10 },
+  rowCampos:             { flexDirection: 'row', marginTop: 0 },
+  campoMitad:            { flex: 1 },
+  switchFila:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
+  tablaRefraccion:       { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, marginTop: 5, overflow: 'hidden' },
+  tablaFila:             { flexDirection: 'row' },
+  tablaEncabezado:       { backgroundColor: '#f5f5f5' },
+  tablaFilaDatos:        { borderTopWidth: 1, borderTopColor: '#eee' },
+  tablaCelda:            { flex: 1, padding: 8, textAlign: 'center' },
+  tablaCeldaLabel:       { fontWeight: 'bold', color: '#555', fontSize: 12 },
+  tablaOD:               { fontWeight: 'bold', color: '#1565C0' },
+  tablaOI:               { fontWeight: 'bold', color: '#C62828' },
+  tablaCeldaInput:       { borderLeftWidth: 1, borderLeftColor: '#eee', fontSize: 13, textAlign: 'center' },
+  tablaCeldaInputOI:     { borderLeftWidth: 1, borderLeftColor: '#eee' },
+  badgeEspecialista:     { backgroundColor: '#FFF3E0', padding: 12, borderRadius: 8, marginBottom: 10 },
+  badgeEspecialistaTexto:{ color: '#E65100', fontWeight: 'bold', fontSize: 13 },
+  barraWizard:           { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  paso:                  { alignItems: 'center' },
+  circuloPaso:           { width: 28, height: 28, borderRadius: 14, backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center' },
+  circuloActivo:         { backgroundColor: '#3D5AFE' },
+  circuloListo:          { backgroundColor: '#00C853' },
+  numeroPaso:            { fontSize: 12, color: '#999', fontWeight: 'bold' },
+  numeroPasoActivo:      { color: '#fff' },
+  nombrePaso:            { fontSize: 9, color: '#aaa', marginTop: 3 },
+  nombrePasoActivo:      { color: '#3D5AFE', fontWeight: 'bold' },
+  lineaPaso:             { flex: 1, height: 2, backgroundColor: '#eee', marginBottom: 12 },
+  lineaPasoActiva:       { backgroundColor: '#3D5AFE' },
+  botones:               { flexDirection: 'row', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
+  btnAnterior:           { paddingVertical: 12, paddingHorizontal: 20, borderWidth: 1, borderColor: '#3D5AFE', borderRadius: 8 },
+  btnAnteriorTexto:      { color: '#3D5AFE', fontWeight: 'bold' },
+  btnSiguiente:          { paddingVertical: 12, paddingHorizontal: 24, backgroundColor: '#3D5AFE', borderRadius: 8, marginLeft: 'auto' },
+  btnSiguienteTexto:     { color: '#fff', fontWeight: 'bold' },
+  btnGuardar:            { flex: 1, paddingVertical: 12, backgroundColor: '#00C853', borderRadius: 8, alignItems: 'center' },
+  btnGuardarTexto:       { color: '#fff', fontWeight: 'bold', fontSize: 15 },
 });

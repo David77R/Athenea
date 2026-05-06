@@ -7,6 +7,8 @@ import LoginScreen from '../pantallas/login';
 import HomeScreen from '../pantallas/home';
 import RegistroScreen from '../pantallas/registro';
 import FormularioScreen from '../pantallas/formulario';
+import GrabacionScreen from '../pantallas/grabacion';
+import { StackScreen } from 'react-native-screens';
 
 const Stack = createNativeStackNavigator();
 
@@ -34,6 +36,7 @@ export default function AppNavigator() {
               {(props) => <HomeScreen {...props} setToken={setToken} />}
             </Stack.Screen>
             <Stack.Screen name="Formulario" component={FormularioScreen} />
+            <Stack.Screen name="Grabacion" component={GrabacionScreen} />
           </>
         ) : (
           <>
