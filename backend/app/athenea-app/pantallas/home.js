@@ -25,7 +25,6 @@ export default function HomeScreen({ navigation, setToken }) {
     <SafeAreaView style={styles.contenedor}>
       <ScrollView showsVerticalScrollIndicator={false}>
 
-        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.saludo}>Bienvenido, {nombreUsuario} 👋</Text>
@@ -36,18 +35,16 @@ export default function HomeScreen({ navigation, setToken }) {
           </TouchableOpacity>
         </View>
 
-        {/* Botón principal */}
         <TouchableOpacity
           style={styles.btnPrincipal}
-          onPress={() => navigation.navigate('Formulario')}
+          onPress={() => navigation.navigate('Grabacion')}
           activeOpacity={0.85}
         >
-          <Text style={styles.btnPrincipalIcono}>📋</Text>
-          <Text style={styles.btnPrincipalTexto}>Registrar Historia Clínica</Text>
-          <Text style={styles.btnPrincipalSub}>Toca para iniciar un nuevo registro</Text>
+          <Text style={styles.btnPrincipalIcono}>🎙️</Text>
+          <Text style={styles.btnPrincipalTexto}>Nueva Historia Clínica</Text>
+          <Text style={styles.btnPrincipalSub}>Graba el dictado para comenzar</Text>
         </TouchableOpacity>
 
-        {/* Tarjetas de acceso rápido */}
         <Text style={styles.seccionTitulo}>Acceso rápido</Text>
         <View style={styles.grid}>
 
@@ -66,16 +63,16 @@ export default function HomeScreen({ navigation, setToken }) {
             <Text style={styles.tarjetaTexto}>Mi{'\n'}perfil</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.tarjeta}
-            onPress={() => navigation.navigate('Grabacion')}
-            >
-            <Text style={styles.tarjetaIcono}>🎙️</Text>
-            <Text style={styles.tarjetaTexto}>Registro{'\n'}por voz</Text>
+          <TouchableOpacity
+            style={styles.tarjeta}
+            onPress={() => navigation.navigate('Formulario')}
+          >
+            <Text style={styles.tarjetaIcono}>📋</Text>
+            <Text style={styles.tarjetaTexto}>Registro{'\n'}manual</Text>
           </TouchableOpacity>
 
         </View>
 
-        {/* Estado offline */}
         <View style={styles.estadoOffline}>
           <Text style={styles.estadoTexto}>🟢 Conectado — Los datos se sincronizan automáticamente</Text>
         </View>

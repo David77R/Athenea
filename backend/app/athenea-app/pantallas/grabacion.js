@@ -1,386 +1,292 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, ScrollView,
-  TouchableOpacity, Switch, KeyboardAvoidingView, Platform, Alert
+  View, Text, TouchableOpacity, StyleSheet,
+  SafeAreaView, ActivityIndicator, Alert, ScrollView
 } from 'react-native';
+import { Audio } from 'expo-av';
+import CONFIG from '../config';
 
-const PASOS = ['Paciente', 'Anamnesis', 'Examen', 'Diagnóstico'];
+export default function GrabacionScreen({ navigation }) {
+  const [grabando, setGrabando] = useState(false);
+  const [procesando, setProcesando] = useState(false);
+  const [textoTranscrito, setTextoTranscrito] = useState('');
+  const [duracion, setDuracion] = useState(0);
+  const [grabacionFinalizada, setGrabacionFinalizada] = useState(false);
+  const grabacionRef = useRef(null);
+  const intervalRef = useRef(null);
 
-export default function FormularioScreen({ route, navigation }) {
-  const { textoIA, datosIA } = route.params || {};
-
-  const [pasoActual, setPasoActual] = useState(0);
-
-  const [nombre, setNombre]             = useState('');
-  const [cedula, setCedula]             = useState('');
-  const [fechaNac, setFechaNac]         = useState('');
-  const [edad, setEdad]                 = useState('');
-  const [telefono, setTelefono]         = useState('');
-  const [ocupacion, setOcupacion]       = useState('');
-  const nroHistoria                     = `HC-${Date.now()}`;
-  const fechaConsulta                   = new Date().toLocaleDateString('es-ES');
-
-  const [motivo, setMotivo]             = useState('');
-  const [tiempoEvolucion, setTiempoEvo] = useState('');
-  const [antOcularPersonal, setAntOcPer] = useState('');
-  const [antOcularFamiliar, setAntOcFam] = useState('');
-  const [antMedicos, setAntMed]         = useState('');
-  const [usaLentes, setUsaLentes]       = useState(false);
-  const [tipoLentes, setTipoLentes]     = useState('');
-  const [medicamentos, setMedicamentos] = useState('');
-
-  const [avscOD, setAvscOD] = useState('');
-  const [avscOI, setAvscOI] = useState('');
-  const [avccOD, setAvccOD] = useState('');
-  const [avccOI, setAvccOI] = useState('');
-  const [esfOD, setEsfOD]   = useState('');
-  const [esfOI, setEsfOI]   = useState('');
-  const [cilOD, setCilOD]   = useState('');
-  const [cilOI, setCilOI]   = useState('');
-  const [ejeOD, setEjeOD]   = useState('');
-  const [ejeOI, setEjeOI]   = useState('');
-  const [addOD, setAddOD]   = useState('');
-  const [addOI, setAddOI]   = useState('');
-  const [pioOD, setPioOD]   = useState('');
-  const [pioOI, setPioOI]   = useState('');
-  const [ishaOD, setIshaOD] = useState('');
-  const [ishaOI, setIshaOI] = useState('');
-
-  const [diagPrincipal, setDiagPrincipal]     = useState('');
-  const [diagSecundario, setDiagSecundario]   = useState('');
-  const [prescripcion, setPrescripcion]       = useState('');
-  const [proximaCita, setProximaCita]         = useState('');
-  const [observaciones, setObservaciones]     = useState('');
-
-  useEffect(() => {
-    if (datosIA) {
-      setMotivo(datosIA.narrative || '');
-      setTiempoEvo(datosIA.tiempoEvolucion || '');
-
-      if (datosIA.visualAcuity) {
-        setAvscOD(datosIA.visualAcuity.od || '');
-        setAvscOI(datosIA.visualAcuity.oi || '');
+  async function iniciarGrabacion() {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Necesitas permitir el acceso al micrófono');
+        return;
       }
-      if (datosIA.intraocularPressure) {
-        setPioOD(datosIA.intraocularPressure.od || '');
-        setPioOI(datosIA.intraocularPressure.oi || '');
-      }
-      if (datosIA.refraccion) {
-        setEsfOD(datosIA.refraccion.esf_od || '');
-        setEsfOI(datosIA.refraccion.esf_oi || '');
-        setCilOD(datosIA.refraccion.cil_od || '');
-        setCilOI(datosIA.refraccion.cil_oi || '');
-        setEjeOD(datosIA.refraccion.eje_od || '');
-        setEjeOI(datosIA.refraccion.eje_oi || '');
-      }
-      if (datosIA.paciente) {
-        setNombre(datosIA.paciente.nombre || '');
-        setCedula(datosIA.paciente.cedula || '');
-        setTelefono(datosIA.paciente.telefono || '');
-        setOcupacion(datosIA.paciente.ocupacion || '');
-      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      grabacionRef.current = recording;
+      setGrabando(true);
+      setTextoTranscrito('');
+      setGrabacionFinalizada(false);
+      setDuracion(0);
+
+      intervalRef.current = setInterval(() => {
+        setDuracion((d) => d + 1);
+      }, 1000);
+
+    } catch (e) {
+      console.error('Error al grabar:', e);
+      Alert.alert('Error', 'No se pudo iniciar la grabación');
     }
-  }, [datosIA]);
+  }
 
-  const guardar = () => {
-    const historia = {
-      paciente:    { nombre, cedula, fechaNac, edad, telefono, ocupacion, fechaConsulta, nroHistoria },
-      anamnesis:   { motivo, tiempoEvolucion, antOcularPersonal, antOcularFamiliar, antMedicos, usaLentes, tipoLentes, medicamentos },
-      examen:      { avscOD, avscOI, avccOD, avccOI, esfOD, esfOI, cilOD, cilOI, ejeOD, ejeOI, addOD, addOI, pioOD, pioOI, ishaOD, ishaOI },
-      diagnostico: { diagPrincipal, diagSecundario, prescripcion, proximaCita, observaciones },
-      sincronizado: 0,
-    };
-    console.log('Historia a guardar:', JSON.stringify(historia, null, 2));
-    Alert.alert('Guardado', 'Historia clínica guardada correctamente.',
-      [{ text: 'OK', onPress: () => navigation.navigate('Home') }]);
-  };
+  async function detenerGrabacion() {
+    try {
+      clearInterval(intervalRef.current);
+      setGrabando(false);
+      setGrabacionFinalizada(true);
+      setProcesando(true);
 
-  const renderPaso = () => {
-    switch (pasoActual) {
+      await grabacionRef.current.stopAndUnloadAsync();
+      const uri = grabacionRef.current.getURI();
 
-      case 0:
-        return (
-          <View>
-            <View style={styles.rowCampos}>
-              <View style={[styles.campoMitad, { marginRight: 8 }]}>
-                <Text style={styles.label}>N° Historia</Text>
-                <TextInput style={[styles.input, styles.inputDesactivado]} value={nroHistoria} editable={false} />
-              </View>
-              <View style={styles.campoMitad}>
-                <Text style={styles.label}>Fecha consulta</Text>
-                <TextInput style={[styles.input, styles.inputDesactivado]} value={fechaConsulta} editable={false} />
-              </View>
-            </View>
+      const formData = new FormData();
+      formData.append('audio', {
+        uri,
+        name: 'grabacion.m4a',
+        type: 'audio/m4a',
+      });
 
-            <Text style={styles.label}>Nombre completo *</Text>
-            <TextInput style={styles.input} placeholder="Nombre y apellido" value={nombre} onChangeText={setNombre} />
+      const respuesta = await fetch(`${CONFIG.IA_URL}/transcribir`, {
+        method: 'POST',
+        body: formData,
+      });
 
-            <Text style={styles.label}>Cédula *</Text>
-            <TextInput style={styles.input} placeholder="Número de cédula" keyboardType="numeric" value={cedula} onChangeText={setCedula} />
+      if (respuesta.ok) {
+        const datos = await respuesta.json();
+        setTextoTranscrito(datos.texto || 'No se detectó texto');
+      } else {
+        setTextoTranscrito('Error al transcribir. Intenta de nuevo.');
+      }
 
-            <View style={styles.rowCampos}>
-              <View style={[styles.campoMitad, { marginRight: 8 }]}>
-                <Text style={styles.label}>Fecha nacimiento</Text>
-                <TextInput style={styles.input} placeholder="DD/MM/AAAA" value={fechaNac} onChangeText={setFechaNac} />
-              </View>
-              <View style={styles.campoMitad}>
-                <Text style={styles.label}>Edad</Text>
-                <TextInput style={styles.input} placeholder="Años" keyboardType="numeric" value={edad} onChangeText={setEdad} />
-              </View>
-            </View>
-
-            <Text style={styles.label}>Teléfono</Text>
-            <TextInput style={styles.input} placeholder="Número de contacto" keyboardType="phone-pad" value={telefono} onChangeText={setTelefono} />
-
-            <Text style={styles.label}>Ocupación</Text>
-            <TextInput style={styles.input} placeholder="Profesión u oficio" value={ocupacion} onChangeText={setOcupacion} />
-          </View>
-        );
-
-      case 1:
-        return (
-          <View>
-            <Text style={styles.label}>Motivo de consulta *</Text>
-            <TextInput style={[styles.input, styles.inputMultilinea]} placeholder="¿Por qué consulta el paciente?"
-              value={motivo} onChangeText={setMotivo} multiline numberOfLines={4} />
-
-            <Text style={styles.label}>Tiempo de evolución</Text>
-            <TextInput style={styles.input} placeholder="Ej: 2 semanas, 1 mes..." value={tiempoEvolucion} onChangeText={setTiempoEvo} />
-
-            <Text style={styles.label}>Antecedentes oculares personales</Text>
-            <TextInput style={[styles.input, styles.inputMultilinea]} placeholder="Cirugías, enfermedades oculares previas..."
-              value={antOcularPersonal} onChangeText={setAntOcPer} multiline numberOfLines={3} />
-
-            <Text style={styles.label}>Antecedentes oculares familiares</Text>
-            <TextInput style={[styles.input, styles.inputMultilinea]} placeholder="Glaucoma, cataratas, degeneración macular..."
-              value={antOcularFamiliar} onChangeText={setAntOcFam} multiline numberOfLines={3} />
-
-            <Text style={styles.label}>Antecedentes médicos generales</Text>
-            <TextInput style={[styles.input, styles.inputMultilinea]} placeholder="Diabetes, hipertensión, alergias..."
-              value={antMedicos} onChangeText={setAntMed} multiline numberOfLines={3} />
-
-            <View style={styles.switchFila}>
-              <Text style={styles.label}>¿Usa lentes actualmente?</Text>
-              <Switch value={usaLentes} onValueChange={setUsaLentes}
-                trackColor={{ false: '#ccc', true: '#3D5AFE' }} thumbColor="#fff" />
-            </View>
-
-            {usaLentes && (
-              <>
-                <Text style={styles.label}>Tipo de lentes</Text>
-                <TextInput style={styles.input} placeholder="Monofocales, bifocales, lentes de contacto..."
-                  value={tipoLentes} onChangeText={setTipoLentes} />
-              </>
-            )}
-
-            <Text style={styles.label}>Medicamentos actuales</Text>
-            <TextInput style={styles.input} placeholder="Ninguno o liste los medicamentos"
-              value={medicamentos} onChangeText={setMedicamentos} />
-          </View>
-        );
-
-      case 2:
-        return (
-          <View>
-            <Text style={styles.subtitulo}>Agudeza Visual Sin Corrección (AVSC)</Text>
-            <View style={styles.rowCampos}>
-              <View style={[styles.campoMitad, { marginRight: 8 }]}>
-                <Text style={styles.labelOD}>OD</Text>
-                <TextInput style={styles.input} placeholder="20/__" value={avscOD} onChangeText={setAvscOD} />
-              </View>
-              <View style={styles.campoMitad}>
-                <Text style={styles.labelOI}>OI</Text>
-                <TextInput style={styles.input} placeholder="20/__" value={avscOI} onChangeText={setAvscOI} />
-              </View>
-            </View>
-
-            <Text style={styles.subtitulo}>Agudeza Visual Con Corrección (AVCC)</Text>
-            <View style={styles.rowCampos}>
-              <View style={[styles.campoMitad, { marginRight: 8 }]}>
-                <Text style={styles.labelOD}>OD</Text>
-                <TextInput style={styles.input} placeholder="20/__" value={avccOD} onChangeText={setAvccOD} />
-              </View>
-              <View style={styles.campoMitad}>
-                <Text style={styles.labelOI}>OI</Text>
-                <TextInput style={styles.input} placeholder="20/__" value={avccOI} onChangeText={setAvccOI} />
-              </View>
-            </View>
-
-            <Text style={styles.subtitulo}>Refracción</Text>
-            <View style={styles.tablaRefraccion}>
-              <View style={[styles.tablaFila, styles.tablaEncabezado]}>
-                <Text style={[styles.tablaCelda, styles.tablaCeldaLabel]}></Text>
-                <Text style={[styles.tablaCelda, styles.tablaOD]}>OD</Text>
-                <Text style={[styles.tablaCelda, styles.tablaOI]}>OI</Text>
-              </View>
-              {[
-                { label: 'Esférico',   valOD: esfOD, setOD: setEsfOD, valOI: esfOI, setOI: setEsfOI, ph: '+/- 0.00' },
-                { label: 'Cilíndrico', valOD: cilOD, setOD: setCilOD, valOI: cilOI, setOI: setCilOI, ph: '+/- 0.00' },
-                { label: 'Eje',        valOD: ejeOD, setOD: setEjeOD, valOI: ejeOI, setOI: setEjeOI, ph: '0°–180°'  },
-                { label: 'ADD',        valOD: addOD, setOD: setAddOD, valOI: addOI, setOI: setAddOI, ph: '0.00'     },
-              ].map(({ label, valOD, setOD, valOI, setOI, ph }) => (
-                <View key={label} style={[styles.tablaFila, styles.tablaFilaDatos]}>
-                  <Text style={[styles.tablaCelda, styles.tablaCeldaLabel]}>{label}</Text>
-                  <TextInput style={[styles.tablaCelda, styles.tablaCeldaInput]}
-                    placeholder={ph} keyboardType="decimal-pad" value={valOD} onChangeText={setOD} />
-                  <TextInput style={[styles.tablaCelda, styles.tablaCeldaInput, styles.tablaCeldaInputOI]}
-                    placeholder={ph} keyboardType="decimal-pad" value={valOI} onChangeText={setOI} />
-                </View>
-              ))}
-            </View>
-
-            <Text style={styles.subtitulo}>Presión Intraocular (PIO)</Text>
-            <View style={styles.rowCampos}>
-              <View style={[styles.campoMitad, { marginRight: 8 }]}>
-                <Text style={styles.labelOD}>OD</Text>
-                <TextInput style={styles.input} placeholder="mmHg" keyboardType="decimal-pad" value={pioOD} onChangeText={setPioOD} />
-              </View>
-              <View style={styles.campoMitad}>
-                <Text style={styles.labelOI}>OI</Text>
-                <TextInput style={styles.input} placeholder="mmHg" keyboardType="decimal-pad" value={pioOI} onChangeText={setPioOI} />
-              </View>
-            </View>
-
-            <Text style={styles.subtitulo}>Visión de Color (Ishihara)</Text>
-            <View style={styles.rowCampos}>
-              <View style={[styles.campoMitad, { marginRight: 8 }]}>
-                <Text style={styles.labelOD}>OD</Text>
-                <TextInput style={styles.input} placeholder="Normal / Alterada" value={ishaOD} onChangeText={setIshaOD} />
-              </View>
-              <View style={styles.campoMitad}>
-                <Text style={styles.labelOI}>OI</Text>
-                <TextInput style={styles.input} placeholder="Normal / Alterada" value={ishaOI} onChangeText={setIshaOI} />
-              </View>
-            </View>
-          </View>
-        );
-
-      case 3:
-        return (
-          <View>
-            <View style={styles.badgeEspecialista}>
-              <Text style={styles.badgeEspecialistaTexto}>
-                🔒 Sección exclusiva del especialista
-              </Text>
-            </View>
-
-            <Text style={styles.label}>Diagnóstico principal *</Text>
-            <TextInput style={[styles.input, styles.inputMultilinea]} placeholder="Ingrese el diagnóstico..."
-              value={diagPrincipal} onChangeText={setDiagPrincipal} multiline numberOfLines={3} />
-
-            <Text style={styles.label}>Diagnóstico secundario</Text>
-            <TextInput style={[styles.input, styles.inputMultilinea]} placeholder="Si aplica..."
-              value={diagSecundario} onChangeText={setDiagSecundario} multiline numberOfLines={3} />
-
-            <Text style={styles.label}>Prescripción de lentes</Text>
-            <TextInput style={[styles.input, styles.inputMultilinea]} placeholder="Detalle si aplica..."
-              value={prescripcion} onChangeText={setPrescripcion} multiline numberOfLines={3} />
-
-            <Text style={styles.label}>Próxima cita</Text>
-            <TextInput style={styles.input} placeholder="DD/MM/AAAA" value={proximaCita} onChangeText={setProximaCita} />
-
-            <Text style={styles.label}>Observaciones</Text>
-            <TextInput style={[styles.input, styles.inputMultilinea]} placeholder="Observaciones, recomendaciones..."
-              value={observaciones} onChangeText={setObservaciones} multiline numberOfLines={4} />
-
-            {textoIA ? (
-              <>
-                <Text style={[styles.label, { marginTop: 16, color: '#999' }]}>Texto capturado:</Text>
-                <Text style={styles.textoIA}>{textoIA}</Text>
-              </>
-            ) : null}
-          </View>
-        );
+    } catch (e) {
+      console.error('Error al detener:', e);
+      setTextoTranscrito('Sin conexión al servidor.');
+    } finally {
+      setProcesando(false);
     }
-  };
+  }
+
+  function formatearTiempo(segundos) {
+    const m = Math.floor(segundos / 60).toString().padStart(2, '0');
+    const s = (segundos % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  async function usarTexto() {
+    if (!textoTranscrito) {
+      Alert.alert('Sin texto', 'Primero graba y transcribe el audio');
+      return;
+    }
+
+    setProcesando(true);
+    try {
+      const respuesta = await fetch(`${CONFIG.IA_URL}/structure`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawText: textoTranscrito }),
+      });
+
+      if (respuesta.ok) {
+        const datosIA = await respuesta.json();
+        navigation.navigate('Formulario', {
+          textoIA: textoTranscrito,
+          datosIA,
+        });
+      } else {
+        navigation.navigate('Formulario', { textoIA: textoTranscrito });
+      }
+    } catch (e) {
+      navigation.navigate('Formulario', { textoIA: textoTranscrito });
+    } finally {
+      setProcesando(false);
+    }
+  }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-      <View style={styles.barraWizard}>
-        {PASOS.map((nombre, index) => (
-          <React.Fragment key={index}>
-            <TouchableOpacity style={styles.paso} onPress={() => index < pasoActual && setPasoActual(index)}>
-              <View style={[styles.circuloPaso, pasoActual >= index && styles.circuloActivo, pasoActual > index && styles.circuloListo]}>
-                <Text style={[styles.numeroPaso, pasoActual >= index && styles.numeroPasoActivo]}>
-                  {pasoActual > index ? '✓' : index + 1}
-                </Text>
-              </View>
-              <Text style={[styles.nombrePaso, pasoActual >= index && styles.nombrePasoActivo]}>{nombre}</Text>
-            </TouchableOpacity>
-            {index < PASOS.length - 1 && (
-              <View style={[styles.lineaPaso, pasoActual > index && styles.lineaPasoActiva]} />
+    <SafeAreaView style={styles.contenedor}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Text style={styles.volver}>← Volver</Text>
+          </TouchableOpacity>
+          <Text style={styles.titulo}>Registro por Voz</Text>
+          <Text style={styles.subtitulo}>IA Offline · Vosk</Text>
+        </View>
+
+        <View style={styles.areaGrabacion}>
+          <View style={[styles.circulo, grabando && styles.circuloActivo]}>
+            <Text style={styles.microIcono}>🎙️</Text>
+            {grabando && (
+              <Text style={styles.tiempoTexto}>{formatearTiempo(duracion)}</Text>
             )}
-          </React.Fragment>
-        ))}
-      </View>
+          </View>
 
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Formulario Clínico</Text>
-        {renderPaso()}
+          {grabando ? (
+            <Text style={styles.estadoTexto}>Grabando... habla claramente</Text>
+          ) : procesando ? (
+            <Text style={styles.estadoTexto}>Procesando con Vosk...</Text>
+          ) : grabacionFinalizada && !textoTranscrito ? (
+            <Text style={styles.estadoTexto}>Grabación finalizada</Text>
+          ) : (
+            <Text style={styles.estadoTexto}>Presiona para iniciar la grabación</Text>
+          )}
+
+          {!procesando && !grabacionFinalizada && (
+            <TouchableOpacity
+              style={[styles.botonGrabar, grabando && styles.botonDetener]}
+              onPress={grabando ? detenerGrabacion : iniciarGrabacion}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.botonTexto}>
+                {grabando ? '⏹ Finalizar grabación' : '⏺ Iniciar grabación'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {grabacionFinalizada && !procesando && !textoTranscrito && (
+            <View style={styles.finalizadoContainer}>
+              <Text style={styles.finalizadoTexto}>✅ Grabación finalizada</Text>
+            </View>
+          )}
+
+          {procesando && (
+            <View style={styles.procesandoContainer}>
+              <ActivityIndicator color="#1A237E" size="large" />
+              <Text style={styles.procesandoTexto}>
+                {grabacionFinalizada ? 'Vosk transcribiendo...' : 'Estructurando con IA...'}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {textoTranscrito ? (
+          <View style={styles.resultado}>
+            <Text style={styles.resultadoTitulo}>📝 Texto transcrito</Text>
+            <Text style={styles.resultadoTexto}>{textoTranscrito}</Text>
+
+            <TouchableOpacity
+              style={styles.botonUsar}
+              onPress={usarTexto}
+              disabled={procesando}
+              activeOpacity={0.85}
+            >
+              {procesando ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.botonUsarTexto}>✨ Rellenar formulario con IA →</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.botonReintentar}
+              onPress={() => {
+                setTextoTranscrito('');
+                setGrabacionFinalizada(false);
+                setDuracion(0);
+              }}
+            >
+              <Text style={styles.botonReintentarTexto}>Grabar de nuevo</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        <View style={styles.instrucciones}>
+          <Text style={styles.instruccionesTitulo}>💡 Consejos</Text>
+          <Text style={styles.instruccionesTexto}>
+            • Menciona nombre y cédula del paciente{'\n'}
+            • Dicta el motivo de consulta claramente{'\n'}
+            • Menciona "miopía", "astigmatismo" o "hipermetropía"{'\n'}
+            • Funciona sin conexión a internet
+          </Text>
+        </View>
+
       </ScrollView>
-
-      <View style={styles.botones}>
-        {pasoActual > 0 && (
-          <TouchableOpacity style={styles.btnAnterior} onPress={() => setPasoActual(p => p - 1)}>
-            <Text style={styles.btnAnteriorTexto}>← Anterior</Text>
-          </TouchableOpacity>
-        )}
-        {pasoActual < PASOS.length - 1 ? (
-          <TouchableOpacity style={styles.btnSiguiente} onPress={() => setPasoActual(p => p + 1)}>
-            <Text style={styles.btnSiguienteTexto}>Siguiente →</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.btnGuardar} onPress={guardar}>
-            <Text style={styles.btnGuardarTexto}>Guardar Historia Clínica</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container:             { padding: 20, paddingBottom: 100 },
-  title:                 { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
-  label:                 { fontWeight: 'bold', marginTop: 10 },
-  input:                 { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 5, marginTop: 5 },
-  textoIA:               { marginTop: 10, fontStyle: 'italic', color: '#666' },
-  inputDesactivado:      { backgroundColor: '#f4f4f4', color: '#999' },
-  inputMultilinea:       { height: 80, textAlignVertical: 'top' },
-  subtitulo:             { fontWeight: 'bold', marginTop: 16, marginBottom: 4, color: '#3D5AFE', fontSize: 13 },
-  labelOD:               { fontWeight: 'bold', color: '#1565C0', marginTop: 10 },
-  labelOI:               { fontWeight: 'bold', color: '#C62828', marginTop: 10 },
-  rowCampos:             { flexDirection: 'row', marginTop: 0 },
-  campoMitad:            { flex: 1 },
-  switchFila:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
-  tablaRefraccion:       { borderWidth: 1, borderColor: '#ccc', borderRadius: 5, marginTop: 5, overflow: 'hidden' },
-  tablaFila:             { flexDirection: 'row' },
-  tablaEncabezado:       { backgroundColor: '#f5f5f5' },
-  tablaFilaDatos:        { borderTopWidth: 1, borderTopColor: '#eee' },
-  tablaCelda:            { flex: 1, padding: 8, textAlign: 'center' },
-  tablaCeldaLabel:       { fontWeight: 'bold', color: '#555', fontSize: 12 },
-  tablaOD:               { fontWeight: 'bold', color: '#1565C0' },
-  tablaOI:               { fontWeight: 'bold', color: '#C62828' },
-  tablaCeldaInput:       { borderLeftWidth: 1, borderLeftColor: '#eee', fontSize: 13, textAlign: 'center' },
-  tablaCeldaInputOI:     { borderLeftWidth: 1, borderLeftColor: '#eee' },
-  badgeEspecialista:     { backgroundColor: '#FFF3E0', padding: 12, borderRadius: 8, marginBottom: 10 },
-  badgeEspecialistaTexto:{ color: '#E65100', fontWeight: 'bold', fontSize: 13 },
-  barraWizard:           { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  paso:                  { alignItems: 'center' },
-  circuloPaso:           { width: 28, height: 28, borderRadius: 14, backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center' },
-  circuloActivo:         { backgroundColor: '#3D5AFE' },
-  circuloListo:          { backgroundColor: '#00C853' },
-  numeroPaso:            { fontSize: 12, color: '#999', fontWeight: 'bold' },
-  numeroPasoActivo:      { color: '#fff' },
-  nombrePaso:            { fontSize: 9, color: '#aaa', marginTop: 3 },
-  nombrePasoActivo:      { color: '#3D5AFE', fontWeight: 'bold' },
-  lineaPaso:             { flex: 1, height: 2, backgroundColor: '#eee', marginBottom: 12 },
-  lineaPasoActiva:       { backgroundColor: '#3D5AFE' },
-  botones:               { flexDirection: 'row', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
-  btnAnterior:           { paddingVertical: 12, paddingHorizontal: 20, borderWidth: 1, borderColor: '#3D5AFE', borderRadius: 8 },
-  btnAnteriorTexto:      { color: '#3D5AFE', fontWeight: 'bold' },
-  btnSiguiente:          { paddingVertical: 12, paddingHorizontal: 24, backgroundColor: '#3D5AFE', borderRadius: 8, marginLeft: 'auto' },
-  btnSiguienteTexto:     { color: '#fff', fontWeight: 'bold' },
-  btnGuardar:            { flex: 1, paddingVertical: 12, backgroundColor: '#00C853', borderRadius: 8, alignItems: 'center' },
-  btnGuardarTexto:       { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  contenedor: { flex: 1, backgroundColor: '#F0F4FF' },
+  header: {
+    backgroundColor: '#1A237E',
+    paddingHorizontal: 24, paddingVertical: 20, paddingTop: 40,
+  },
+  volver: { color: 'rgba(255,255,255,0.7)', fontSize: 14, marginBottom: 8 },
+  titulo: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  subtitulo: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 },
+  areaGrabacion: {
+    alignItems: 'center', padding: 32,
+    backgroundColor: '#fff', margin: 16, borderRadius: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+  },
+  circulo: {
+    width: 120, height: 120, borderRadius: 60,
+    backgroundColor: '#E8EAF6',
+    justifyContent: 'center', alignItems: 'center', marginBottom: 20,
+  },
+  circuloActivo: {
+    backgroundColor: '#FFEBEE', borderWidth: 3, borderColor: '#E53935',
+  },
+  microIcono: { fontSize: 48 },
+  tiempoTexto: { fontSize: 14, fontWeight: '700', color: '#E53935', marginTop: 4 },
+  estadoTexto: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 16 },
+  botonGrabar: {
+    backgroundColor: '#1A237E', borderRadius: 12,
+    padding: 16, paddingHorizontal: 32,
+  },
+  botonDetener: { backgroundColor: '#E53935' },
+  botonTexto: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  procesandoContainer: { alignItems: 'center' },
+  procesandoTexto: { color: '#1A237E', fontSize: 14, marginTop: 12 },
+  finalizadoContainer: {
+    backgroundColor: '#E8F5E9', borderRadius: 12, padding: 14, alignItems: 'center',
+  },
+  finalizadoTexto: { color: '#2E7D32', fontSize: 14, fontWeight: '600' },
+  resultado: {
+    backgroundColor: '#fff', margin: 16, marginTop: 0,
+    borderRadius: 16, padding: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+  },
+  resultadoTitulo: { fontSize: 15, fontWeight: '700', color: '#1A237E', marginBottom: 12 },
+  resultadoTexto: {
+    fontSize: 14, color: '#333', lineHeight: 22, marginBottom: 16,
+    backgroundColor: '#F5F5F5', padding: 12, borderRadius: 8,
+  },
+  botonUsar: {
+    backgroundColor: '#1A237E', borderRadius: 12,
+    padding: 14, alignItems: 'center', marginBottom: 8,
+  },
+  botonUsarTexto: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  botonReintentar: {
+    borderWidth: 1, borderColor: '#1A237E',
+    borderRadius: 12, padding: 14, alignItems: 'center',
+  },
+  botonReintentarTexto: { color: '#1A237E', fontSize: 14 },
+  instrucciones: {
+    backgroundColor: '#E8EAF6', margin: 16, marginTop: 0, borderRadius: 16, padding: 20,
+  },
+  instruccionesTitulo: { fontSize: 14, fontWeight: '700', color: '#1A237E', marginBottom: 8 },
+  instruccionesTexto: { fontSize: 13, color: '#555', lineHeight: 22 },
 });
