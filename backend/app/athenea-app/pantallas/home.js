@@ -1,137 +1,201 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity,
-  StyleSheet, SafeAreaView, ScrollView
+  View, Text, TouchableOpacity, StyleSheet,
+  SafeAreaView, ScrollView
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DrawerMenu from '../componentes/drawerMenu';
 
 export default function HomeScreen({ navigation, setToken }) {
-  const [nombreUsuario, setNombreUsuario] = React.useState('');
+  const [nombreUsuario, setNombreUsuario] = useState('');
+  const [email, setEmail] = useState('');
+  const [drawerVisible, setDrawerVisible] = useState(false);
 
-  React.useEffect(() => {
-    async function cargarNombre() {
+  useEffect(() => {
+    async function cargarDatos() {
       const n = await AsyncStorage.getItem('nombre');
+      const e = await AsyncStorage.getItem('email');
       if (n) setNombreUsuario(n);
+      if (e) setEmail(e);
     }
-    cargarNombre();
+    cargarDatos();
   }, []);
-
-  async function handleLogout() {
-    await AsyncStorage.clear();
-    setToken(null);
-  }
 
   return (
     <SafeAreaView style={styles.contenedor}>
-      <ScrollView showsVerticalScrollIndicator={false}>
 
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.saludo}>Bienvenido, {nombreUsuario} 👋</Text>
-            <Text style={styles.sistema}>Sistema Athenea</Text>
-          </View>
-          <TouchableOpacity style={styles.cerrarBtn} onPress={handleLogout}>
-            <Text style={styles.cerrarTexto}>Salir</Text>
-          </TouchableOpacity>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => setDrawerVisible(true)} style={styles.menuBtn}>
+          <View style={styles.hamburguesa} />
+          <View style={styles.hamburguesa} />
+          <View style={styles.hamburguesa} />
+        </TouchableOpacity>
+
+        <View style={styles.headerLogo}>
+          <Text style={styles.headerTitulo}>ATHENEA</Text>
+          <Text style={styles.headerSub}>Historias Clínicas con IA</Text>
         </View>
 
+        <View style={styles.avatarPequeno}>
+          <Text style={styles.avatarPequenoTexto}>
+            {nombreUsuario ? nombreUsuario.charAt(0).toUpperCase() : 'A'}
+          </Text>
+        </View>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false}>
+
+        {/* Saludo */}
+        <View style={styles.saludo}>
+          <Text style={styles.saludoTexto}>Hola, {nombreUsuario || 'Especialista'} 👋</Text>
+          <Text style={styles.saludoSub}>¿Qué deseas hacer hoy?</Text>
+        </View>
+
+        {/* Botón principal */}
         <TouchableOpacity
           style={styles.btnPrincipal}
           onPress={() => navigation.navigate('Grabacion')}
           activeOpacity={0.85}
         >
-          <Text style={styles.btnPrincipalIcono}>🎙️</Text>
-          <Text style={styles.btnPrincipalTexto}>Nueva Historia Clínica</Text>
-          <Text style={styles.btnPrincipalSub}>Graba el dictado para comenzar</Text>
+          <View style={styles.btnPrincipalIconoContainer}>
+            <Text style={styles.btnPrincipalIcono}>🎙️</Text>
+          </View>
+          <View style={styles.btnPrincipalTextos}>
+            <Text style={styles.btnPrincipalTitulo}>Registrar Historia Clínica</Text>
+            <Text style={styles.btnPrincipalSub}>Dicta por voz o ingresa manualmente</Text>
+          </View>
+          <Text style={styles.btnPrincipalFlecha}>→</Text>
         </TouchableOpacity>
 
+        {/* Acceso rápido */}
         <Text style={styles.seccionTitulo}>Acceso rápido</Text>
         <View style={styles.grid}>
 
-          <TouchableOpacity style={styles.tarjeta}>
-            <Text style={styles.tarjetaIcono}>📁</Text>
-            <Text style={styles.tarjetaTexto}>Historias{'\n'}guardadas</Text>
+          <TouchableOpacity
+            style={styles.tarjeta}
+            onPress={() => navigation.navigate('BuscarPaciente')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.tarjetaIcono}>🔍</Text>
+            <Text style={styles.tarjetaTitulo}>Buscar</Text>
+            <Text style={styles.tarjetaSub}>Pacientes</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.tarjeta}>
-            <Text style={styles.tarjetaIcono}>🔄</Text>
-            <Text style={styles.tarjetaTexto}>Estado de{'\n'}sincronización</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tarjeta}>
-            <Text style={styles.tarjetaIcono}>👤</Text>
-            <Text style={styles.tarjetaTexto}>Mi{'\n'}perfil</Text>
+          <TouchableOpacity
+            style={styles.tarjeta}
+            onPress={() => navigation.navigate('Historial')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.tarjetaIcono}>📋</Text>
+            <Text style={styles.tarjetaTitulo}>Historial</Text>
+            <Text style={styles.tarjetaSub}>Clínico</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.tarjeta}
             onPress={() => navigation.navigate('Formulario')}
+            activeOpacity={0.8}
           >
-            <Text style={styles.tarjetaIcono}>📋</Text>
-            <Text style={styles.tarjetaTexto}>Registro{'\n'}manual</Text>
+            <Text style={styles.tarjetaIcono}>✏️</Text>
+            <Text style={styles.tarjetaTitulo}>Registro</Text>
+            <Text style={styles.tarjetaSub}>Manual</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.tarjeta}
+            onPress={() => navigation.navigate('Perfil')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.tarjetaIcono}>👤</Text>
+            <Text style={styles.tarjetaTitulo}>Mi</Text>
+            <Text style={styles.tarjetaSub}>Perfil</Text>
           </TouchableOpacity>
 
         </View>
 
-        <View style={styles.estadoOffline}>
-          <Text style={styles.estadoTexto}>🟢 Conectado — Los datos se sincronizan automáticamente</Text>
+        {/* Estado de sincronización */}
+        <View style={styles.estadoSync}>
+          <View style={styles.estadoPunto} />
+          <Text style={styles.estadoTexto}>Conectado — Sincronización activa</Text>
         </View>
 
       </ScrollView>
+
+      {/* Drawer */}
+      <DrawerMenu
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        navigation={navigation}
+        setToken={setToken}
+        nombreUsuario={nombreUsuario}
+        email={email}
+        pantallaActual="Home"
+      />
+
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  contenedor: {
-    flex: 1,
-    backgroundColor: '#F0F4FF',
-  },
+  contenedor: { flex: 1, backgroundColor: '#F0F9FA' },
   header: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#1A237E',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    paddingTop: 40,
+    backgroundColor: '#0B7B8B',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingTop: 44,
   },
-  saludo: {
-    fontSize: 18, fontWeight: '700', color: '#fff',
+  menuBtn: { padding: 4, gap: 5 },
+  hamburguesa: {
+    width: 22, height: 2,
+    backgroundColor: '#fff',
+    borderRadius: 2,
+    marginVertical: 2,
   },
-  sistema: {
-    fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2,
+  headerLogo: { alignItems: 'center' },
+  headerTitulo: { fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: 3 },
+  headerSub: { fontSize: 9, color: 'rgba(255,255,255,0.7)', letterSpacing: 1 },
+  avatarPequeno: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)',
   },
-  cerrarBtn: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 20,
-  },
-  cerrarTexto: {
-    color: '#fff', fontSize: 13, fontWeight: '600',
-  },
+  avatarPequenoTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  saludo: { padding: 20, paddingBottom: 8 },
+  saludoTexto: { fontSize: 22, fontWeight: '700', color: '#1A3A4A' },
+  saludoSub: { fontSize: 14, color: '#7A9BAB', marginTop: 2 },
   btnPrincipal: {
-    backgroundColor: '#1A237E',
-    margin: 20,
-    borderRadius: 20,
-    padding: 28,
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#1A237E',
-    shadowOffset: { width: 0, height: 8 },
+    backgroundColor: '#0B7B8B',
+    marginHorizontal: 20,
+    marginVertical: 12,
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: '#0B7B8B',
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  btnPrincipalIcono: { fontSize: 48, marginBottom: 12 },
-  btnPrincipalTexto: {
-    fontSize: 20, fontWeight: '700', color: '#fff', marginBottom: 6,
+  btnPrincipalIconoContainer: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center', alignItems: 'center',
+    marginRight: 14,
   },
-  btnPrincipalSub: {
-    fontSize: 13, color: 'rgba(255,255,255,0.7)',
-  },
+  btnPrincipalIcono: { fontSize: 24 },
+  btnPrincipalTextos: { flex: 1 },
+  btnPrincipalTitulo: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  btnPrincipalSub: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
+  btnPrincipalFlecha: { fontSize: 20, color: 'rgba(255,255,255,0.7)' },
   seccionTitulo: {
-    fontSize: 16, fontWeight: '700', color: '#1A237E',
-    paddingHorizontal: 20, marginBottom: 12,
+    fontSize: 15, fontWeight: '700', color: '#1A3A4A',
+    paddingHorizontal: 20, marginTop: 8, marginBottom: 12,
   },
   grid: {
     flexDirection: 'row', flexWrap: 'wrap',
@@ -144,25 +208,27 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#0B7B8B',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
   },
-  tarjetaIcono: { fontSize: 32, marginBottom: 8 },
-  tarjetaTexto: {
-    fontSize: 13, fontWeight: '600',
-    color: '#333', textAlign: 'center',
-  },
-  estadoOffline: {
-    margin: 20,
-    backgroundColor: '#E8F5E9',
-    borderRadius: 12,
-    padding: 14,
+  tarjetaIcono: { fontSize: 28, marginBottom: 8 },
+  tarjetaTitulo: { fontSize: 14, fontWeight: '700', color: '#1A3A4A' },
+  tarjetaSub: { fontSize: 12, color: '#7A9BAB', marginTop: 2 },
+  estadoSync: {
+    flexDirection: 'row',
     alignItems: 'center',
+    margin: 20,
+    backgroundColor: '#E6F7F8',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
   },
-  estadoTexto: {
-    fontSize: 12, color: '#2E7D32',
+  estadoPunto: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: '#0B7B8B',
   },
+  estadoTexto: { fontSize: 12, color: '#0B7B8B', fontWeight: '500' },
 });
