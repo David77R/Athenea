@@ -57,8 +57,14 @@ export default function FormularioScreen({ route, navigation }) {
 
   useEffect(() => {
     if (datosIA) {
-      setMotivo(datosIA.narrative || '');
-      setObservaciones(datosIA.observations || '');
+      setMotivo(datosIA.motivo || datosIA.narrative || '');
+setTiempoEvo(datosIA.tiempoEvolucion || '');
+      setAntOcPer(datosIA.antOcularPersonal || '');
+setAntOcFam(datosIA.antOcularFamiliar || '');
+setAntMed(datosIA.antMedicos || '');
+if (datosIA.usaLentes) setUsaLentes(true);
+setTipoLentes(datosIA.tipoLentes || '');
+setObservaciones(datosIA.observations || '');
 
       if (datosIA.visualAcuity) {
         setAvscOD(datosIA.visualAcuity.od || '');
@@ -81,6 +87,7 @@ export default function FormularioScreen({ route, navigation }) {
         setCedula(datosIA.paciente.cedula || '');
         setTelefono(datosIA.paciente.telefono || '');
         setOcupacion(datosIA.paciente.ocupacion || '');
+      setEdad(datosIA.paciente.edad || '');
       }
     }
   }, [datosIA]);

@@ -77,9 +77,17 @@ export default function GrabacionScreen({ navigation }) {
         setTextoTranscrito('Error al transcribir. Intenta de nuevo.');
       }
 
-    } catch (e) {
+ } catch (e) {
       console.error('Error al detener:', e);
-      setTextoTranscrito('Sin conexión al servidor.');
+      setTextoTranscrito('');
+      Alert.alert(
+        '📵 Sin conexión',
+        'El servidor de IA no está disponible.\n\n¿Deseas registrar la historia manualmente?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Registro manual', onPress: () => navigation.navigate('Formulario') },
+        ]
+      );
     } finally {
       setProcesando(false);
     }

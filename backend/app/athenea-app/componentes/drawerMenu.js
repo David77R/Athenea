@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, Dimensions, TouchableWithoutFeedback
@@ -20,9 +20,11 @@ const MENU_ITEMS = [
 export default function DrawerMenu({ visible, onClose, navigation, setToken, nombreUsuario, email, pantallaActual }) {
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const opacidad = useRef(new Animated.Value(0)).current;
+  const [montado, setMontado] = useState(false);
 
   useEffect(() => {
     if (visible) {
+      setMontado(true);
       Animated.parallel([
         Animated.timing(translateX, {
           toValue: 0,
@@ -47,7 +49,9 @@ export default function DrawerMenu({ visible, onClose, navigation, setToken, nom
           duration: 220,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(() => {
+        setMontado(false);
+      });
     }
   }, [visible]);
 
@@ -62,19 +66,16 @@ export default function DrawerMenu({ visible, onClose, navigation, setToken, nom
     setTimeout(() => navigation.navigate(pantalla), 250);
   }
 
-  if (!visible && translateX._value === -DRAWER_WIDTH) return null;
+  if (!montado) return null;
 
   return (
     <View style={styles.overlay}>
-      {/* Fondo oscuro al tocar cierra el drawer */}
       <TouchableWithoutFeedback onPress={onClose}>
         <Animated.View style={[styles.fondo, { opacity: opacidad }]} />
       </TouchableWithoutFeedback>
 
-      {/* Panel del drawer */}
       <Animated.View style={[styles.drawer, { transform: [{ translateX }] }]}>
 
-        {/* Header con perfil */}
         <View style={styles.header}>
           <View style={styles.logoFila}>
             <View style={styles.logoCirculo}>
@@ -92,7 +93,6 @@ export default function DrawerMenu({ visible, onClose, navigation, setToken, nom
           <Text style={styles.emailUsuario}>{email || 'Sin correo'}</Text>
         </View>
 
-        {/* Items del menú */}
         <View style={styles.menuContenedor}>
           {MENU_ITEMS.map((item) => {
             const activo = pantallaActual === item.name;
@@ -113,7 +113,6 @@ export default function DrawerMenu({ visible, onClose, navigation, setToken, nom
           })}
         </View>
 
-        {/* Botón cerrar sesión */}
         <TouchableOpacity style={styles.cerrarSesion} onPress={handleLogout}>
           <Text style={styles.cerrarIcono}>🚪</Text>
           <Text style={styles.cerrarTexto}>Cerrar sesión</Text>

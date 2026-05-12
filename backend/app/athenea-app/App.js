@@ -1,11 +1,14 @@
 import React, { useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppNavigator from './navegacion/appnav';
 import { inicializarDB } from './baseDatosLite/basedatoslt';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { iniciarAutoSync, detenerAutoSync } from './servicios/syncEngine';
+
 export default function App() {
   useEffect(() => {
-    AsyncStorage.clear();
     inicializarDB();
+    iniciarAutoSync();
+    return () => detenerAutoSync();
   }, []);
 
   return <AppNavigator />;

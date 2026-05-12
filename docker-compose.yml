@@ -88,6 +88,9 @@ services:
     ports:
       - "3003:3003"
 
+  
+      
+
   gateway:
     build:
       context: ./backend/gateway
@@ -104,3 +107,4 @@ volumes:
   postgres_data:
   redis_data:
   mongo_data:
+  
