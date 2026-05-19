@@ -21,7 +21,7 @@ async function crearHistoria(req, res) {
 
 async function obtenerHistorias(req, res) {
     try {
-        const historias = await historia.find({
+        const historias = await Historia.find({
             optometrista_id: req.usuario.sub
         }).sort({ fecha_consulta: -1});
         return res.json(historias);

@@ -4,3 +4,7 @@ node_modules/
 
 ia-service/model/
 ia-service/uploads/
+
+*.env
+.env
+backend/ia-service/.env

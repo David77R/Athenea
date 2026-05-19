@@ -12,7 +12,7 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'Funcionanding', servicio: 'clinical-service' });
 });
 
-app.use('/historiasR', historiasRouter);
+app.use('/historias', historiasRouter);
 
 async function main() {
   await conectarMongo();

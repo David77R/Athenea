@@ -47,6 +47,7 @@ services:
       context: ./backend/auth-service
     container_name: athenea-auth-service
     restart: unless-stopped
+    command: node src/server.js
     depends_on:
       - postgres
       - redis
