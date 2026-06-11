@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DrawerMenu from '../componentes/drawerMenu';
 import { obtenerTodasLasHistorias, obtenerHistoriasPendientes } from '../baseDatosLite/basedatoslt';
 import COLORES from '../constantes/colores';
+import { useAlerta } from '../componentes/AlertaPersonalizada';
 const { width } = Dimensions.get('window');
 
 // ── Días de la semana empezando en Lunes ──────────────────────────────────
@@ -60,7 +61,7 @@ function formatearFechaHoy() {
 
 export default function HomeScreen({ navigation, setToken }) {
   const insets = useSafeAreaInsets();
-
+const { mostrar, AlertaPersonalizada } = useAlerta();
   const [nombreUsuario,  setNombreUsuario]  = useState('');
   const [email,          setEmail]          = useState('');
   const [drawerVisible,  setDrawerVisible]  = useState(false);
@@ -298,7 +299,17 @@ useFocusEffect(
               : 'Conectado · Sincronización activa'}
           </Text>
           {stats.pendientes > 0 && (
-            <TouchableOpacity onPress={() => navigation.navigate('Ajustes')}>
+            <TouchableOpacity onPress={async () => {
+              const resultado = await sincronizarAhora();
+              await cargarDatos();
+              mostrar({
+                tipo: resultado.success ? 'exito' : 'error',
+                titulo: resultado.success ? '¡Sincronizado!' : 'Error al sincronizar',
+                mensaje: resultado.message,
+                icono: resultado.success ? 'cloud-done-outline' : 'cloud-offline-outline',
+                boton: 'Entendido',
+              });
+            }}>
               <Text style={styles.syncLink}>Sincronizar</Text>
             </TouchableOpacity>
           )}
@@ -355,6 +366,7 @@ useFocusEffect(
           </View>
         </View>
       </Modal>
+      <AlertaPersonalizada />
 
       {/* ── Drawer ── */}
       <DrawerMenu

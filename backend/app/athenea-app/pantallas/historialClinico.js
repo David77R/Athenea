@@ -2,15 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl, TextInput, Modal,
-  ScrollView, Platform, StatusBar, Alert
+  ScrollView, Platform, StatusBar
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { obtenerTodasLasHistorias, sincronizarPendientes, borrarHistoriaPorId } from '../baseDatosLite/basedatoslt';
+import { obtenerTodasLasHistorias, borrarHistoriaPorId } from '../baseDatosLite/basedatoslt';
 import { sincronizarAhora } from '../servicios/syncEngine';
 import COLORES from '../constantes/colores';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HeaderConDrawer from '../componentes/HeaderConDrawer';
+import { useAlerta } from '../componentes/AlertaPersonalizada';
+
 const OD_COLOR = '#1565C0';
 const OI_COLOR = '#C62828';
 
@@ -60,9 +62,6 @@ function FilaDetalle({ label, valor }) {
   );
 }
 
-/** 
- * Aqui va la seccion del modal detallada del parse del JSON
-*/
 function SeccionModal({ titulo, icono, children }) {
   return (
     <View style={styles.seccionModal}>
@@ -85,16 +84,15 @@ export default function HistorialClinico({ navigation, route, setToken }) {
   const [modalVisible,  setModalVisible]  = useState(false);
   const [historiaSeleccionada, setHistoriaSeleccionada] = useState(null);
 
+  const { mostrar, AlertaPersonalizada } = useAlerta();
   const cedulaFiltro = route?.params?.cedula || null;
 
- const cargar = useCallback(async () => {
+  const cargar = useCallback(async () => {
     try {
-      const emailEspecialista = await AsyncStorage.getItem('email') || '';
-      const todas = await obtenerTodasLasHistorias();
+      const todas     = await obtenerTodasLasHistorias();
       const parseadas = todas.map(parsearHistoria);
 
       let filtradas = parseadas;
-
       if (cedulaFiltro) {
         filtradas = parseadas.filter(h => h.paciente?.cedula === cedulaFiltro);
       } else if (busqueda.trim()) {
@@ -107,9 +105,15 @@ export default function HistorialClinico({ navigation, route, setToken }) {
 
       setHistorias(filtradas);
       setPendientes(parseadas.filter(h => h.sincronizado === 0).length);
-} catch (e) {
+    } catch (e) {
       console.log('ERROR HISTORIAL:', e.message, e);
-      Alert.alert('Error', 'No se pudo cargar el historial.');
+      mostrar({
+        tipo: 'error',
+        titulo: 'Error',
+        mensaje: 'No se pudo cargar el historial.',
+        icono: 'alert-circle-outline',
+        boton: 'Entendido',
+      });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -128,15 +132,34 @@ export default function HistorialClinico({ navigation, route, setToken }) {
     const resultado = await sincronizarAhora();
     setSincronizando(false);
     await cargar();
-    Alert.alert(
-      resultado.success ? 'Sincronización completada' : 'Error',
-      resultado.message
-    );
+    mostrar({
+      tipo: resultado.success ? 'exito' : 'error',
+      titulo: resultado.success ? 'Sincronización completada' : 'Error al sincronizar',
+      mensaje: resultado.message,
+      icono: resultado.success ? 'cloud-done-outline' : 'cloud-offline-outline',
+      boton: 'Entendido',
+    });
   }
 
   function abrirDetalle(historia) {
     setHistoriaSeleccionada(historia);
     setModalVisible(true);
+  }
+
+  function handleBorrar(h) {
+    mostrar({
+      tipo: 'confirmacion',
+      titulo: 'Borrar historia',
+      mensaje: `¿Eliminar la historia clínica de ${h.paciente?.nombre}? Esta acción no se puede deshacer.`,
+      icono: 'trash-outline',
+      botonCancelar: 'Cancelar',
+      botonConfirmar: 'Borrar',
+      onConfirmar: async () => {
+        await borrarHistoriaPorId(h.id);
+        setModalVisible(false);
+        await cargar();
+      },
+    });
   }
 
   // ─── Card de historia ──────────────────────────────────────────────────
@@ -218,11 +241,11 @@ export default function HistorialClinico({ navigation, route, setToken }) {
             <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
 
               <SeccionModal titulo="Datos del Paciente" icono="person-outline">
-                <FilaDetalle label="Nombre"     valor={h.paciente?.nombre} />
-                <FilaDetalle label="Cédula"     valor={h.paciente?.cedula} />
-                <FilaDetalle label="Edad"       valor={h.paciente?.edad ? `${h.paciente.edad} años` : null} />
-                <FilaDetalle label="Teléfono"   valor={h.paciente?.telefono} />
-                <FilaDetalle label="Ocupación"  valor={h.paciente?.ocupacion} />
+                <FilaDetalle label="Nombre"      valor={h.paciente?.nombre} />
+                <FilaDetalle label="Cédula"      valor={h.paciente?.cedula} />
+                <FilaDetalle label="Edad"        valor={h.paciente?.edad ? `${h.paciente.edad} años` : null} />
+                <FilaDetalle label="Teléfono"    valor={h.paciente?.telefono} />
+                <FilaDetalle label="Ocupación"   valor={h.paciente?.ocupacion} />
                 <FilaDetalle label="N° Historia" valor={h.paciente?.nroHistoria} />
               </SeccionModal>
 
@@ -263,10 +286,10 @@ export default function HistorialClinico({ navigation, route, setToken }) {
                       <Text style={[styles.tablaHeaderOjo, { color: OI_COLOR }]}>OI</Text>
                     </View>
                     {[
-                      { label: 'Esf',  od: h.examen?.esfOD, oi: h.examen?.esfOI },
-                      { label: 'Cil',  od: h.examen?.cilOD, oi: h.examen?.cilOI },
-                      { label: 'Eje',  od: h.examen?.ejeOD, oi: h.examen?.ejeOI },
-                      { label: 'ADD',  od: h.examen?.addOD, oi: h.examen?.addOI },
+                      { label: 'Esf', od: h.examen?.esfOD, oi: h.examen?.esfOI },
+                      { label: 'Cil', od: h.examen?.cilOD, oi: h.examen?.cilOI },
+                      { label: 'Eje', od: h.examen?.ejeOD, oi: h.examen?.ejeOI },
+                      { label: 'ADD', od: h.examen?.addOD, oi: h.examen?.addOI },
                     ].filter(r => r.od || r.oi).map(({ label, od, oi }) => (
                       <View key={label} style={styles.tablaFila}>
                         <Text style={styles.tablaCeldaLabel}>{label}</Text>
@@ -288,15 +311,27 @@ export default function HistorialClinico({ navigation, route, setToken }) {
               </SeccionModal>
 
               <SeccionModal titulo="Diagnóstico" icono="medical-outline">
-                <FilaDetalle label="Principal"    valor={h.diagnostico?.diagPrincipal} />
-                <FilaDetalle label="Secundario"   valor={h.diagnostico?.diagSecundario} />
-                <FilaDetalle label="Prescripción" valor={h.diagnostico?.prescripcion} />
-                <FilaDetalle label="Próxima cita" valor={h.diagnostico?.proximaCita} />
+                <FilaDetalle label="Principal"     valor={h.diagnostico?.diagPrincipal} />
+                <FilaDetalle label="Prescripción"  valor={h.diagnostico?.prescripcion} />
+                <FilaDetalle label="Próxima cita"  valor={h.diagnostico?.proximaCita} />
                 <FilaDetalle label="Observaciones" valor={h.diagnostico?.observaciones} />
               </SeccionModal>
 
             </ScrollView>
-             {/* Botones editar y borrar */}
+
+            {/* Botón receta — fila superior */}
+            <TouchableOpacity
+              style={styles.modalBtnReceta}
+              onPress={() => {
+                setModalVisible(false);
+                setTimeout(() => navigation.navigate('GenerarReceta', { historia: h }), 300);
+              }}
+            >
+              <Ionicons name="receipt-outline" size={16} color="#fff" />
+              <Text style={styles.modalBtnRecetaTexto}>Generar Receta PDF</Text>
+            </TouchableOpacity>
+
+            {/* Botones editar y borrar */}
             <View style={styles.modalBotones}>
               <TouchableOpacity
                 style={styles.modalBtnEditar}
@@ -304,11 +339,19 @@ export default function HistorialClinico({ navigation, route, setToken }) {
                   setModalVisible(false);
                   setTimeout(() => navigation.navigate('Formulario', {
                     datosIA: {
-                      paciente:     h.paciente,
-                      motivo:       h.anamnesis?.motivo,
-                      visualAcuity: { od: h.examen?.avscOD, oi: h.examen?.avscOI },
-                      refraccion:   { esf_od: h.examen?.esfOD, esf_oi: h.examen?.esfOI, cil_od: h.examen?.cilOD, cil_oi: h.examen?.cilOI, eje_od: h.examen?.ejeOD, eje_oi: h.examen?.ejeOI },
+                      paciente:            h.paciente,
+                      motivo:              h.anamnesis?.motivo,
+                      tiempoEvolucion:     h.anamnesis?.tiempoEvolucion,
+                      antOcularPersonal:   h.anamnesis?.antOcularPersonal,
+                      antOcularFamiliar:   h.anamnesis?.antOcularFamiliar,
+                      antMedicos:          h.anamnesis?.antMedicos,
+                      usaLentes:           h.anamnesis?.usaLentes,
+                      tipoLentes:          h.anamnesis?.tipoLentes,
+                      visualAcuity:        { od: h.examen?.avscOD, oi: h.examen?.avscOI, ccOD: h.examen?.avccOD, ccOI: h.examen?.avccOI },
+                      refraccion:          { esf_od: h.examen?.esfOD, esf_oi: h.examen?.esfOI, cil_od: h.examen?.cilOD, cil_oi: h.examen?.cilOI, eje_od: h.examen?.ejeOD, eje_oi: h.examen?.ejeOI, add_od: h.examen?.addOD, add_oi: h.examen?.addOI },
                       intraocularPressure: { od: h.examen?.pioOD, oi: h.examen?.pioOI },
+                      diagnosisPreliminary: h.diagnostico?.diagPrincipal,
+                      observations:        h.diagnostico?.observaciones,
                     },
                   }), 300);
                 }}
@@ -319,24 +362,7 @@ export default function HistorialClinico({ navigation, route, setToken }) {
 
               <TouchableOpacity
                 style={styles.modalBtnBorrar}
-                onPress={() => {
-                  Alert.alert(
-                    'Borrar historia',
-                    `¿Eliminar la historia de ${h.paciente?.nombre}?`,
-                    [
-                      { text: 'Cancelar', style: 'cancel' },
-                      {
-                        text: 'Borrar',
-                        style: 'destructive',
-                        onPress: async () => {
-                          await borrarHistoriaPorId(h.id);
-                          setModalVisible(false);
-                          await cargar();
-                        },
-                      },
-                    ]
-                  );
-                }}
+                onPress={() => handleBorrar(h)}
               >
                 <Ionicons name="trash-outline" size={16} color={COLORES.error} />
                 <Text style={styles.modalBtnBorrarTexto}>Borrar</Text>
@@ -347,8 +373,6 @@ export default function HistorialClinico({ navigation, route, setToken }) {
       </Modal>
     );
   }
-
-  const paddingTop = Platform.OS === 'android' ? 48 : 60;
 
   if (loading) {
     return (
@@ -363,7 +387,7 @@ export default function HistorialClinico({ navigation, route, setToken }) {
     <View style={styles.raiz}>
       <StatusBar barStyle="light-content" />
 
-     <HeaderConDrawer
+      <HeaderConDrawer
         titulo={cedulaFiltro ? `Historial · ${cedulaFiltro}` : 'Historial Clínico'}
         subtitulo={`${historias.length} registro${historias.length !== 1 ? 's' : ''}`}
         navigation={navigation}
@@ -391,19 +415,12 @@ export default function HistorialClinico({ navigation, route, setToken }) {
         </View>
       )}
 
-      {/* Botón sync si hay pendientes */}
-      {pendientes > 0 && (
-        <TouchableOpacity style={styles.syncBtn} onPress={handleSync} disabled={sincronizando}>
-          {sincronizando
-            ? <ActivityIndicator color={COLORES.primario} size="small" />
-            : <Ionicons name="cloud-upload-outline" size={22} color={COLORES.primario} />}
-        </TouchableOpacity>
-      )}
-
       {/* Banner pendientes */}
       {pendientes > 0 && (
         <TouchableOpacity style={styles.bannerPendientes} onPress={handleSync} disabled={sincronizando}>
-          <Ionicons name="cloud-upload-outline" size={14} color="#F57F17" />
+          {sincronizando
+            ? <ActivityIndicator color="#F57F17" size="small" />
+            : <Ionicons name="cloud-upload-outline" size={14} color="#F57F17" />}
           <Text style={styles.bannerTexto}>{pendientes} historia{pendientes !== 1 ? 's' : ''} pendiente{pendientes !== 1 ? 's' : ''} de sincronizar</Text>
           <Text style={styles.bannerAccion}>Sincronizar</Text>
         </TouchableOpacity>
@@ -432,26 +449,20 @@ export default function HistorialClinico({ navigation, route, setToken }) {
       />
 
       <ModalDetalle />
+      <AlertaPersonalizada />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  raiz:       { flex: 1, backgroundColor: COLORES.fondo },
-  loadingCont: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORES.fondo },
+  raiz:         { flex: 1, backgroundColor: COLORES.fondo },
+  loadingCont:  { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORES.fondo },
   loadingTexto: { marginTop: 12, color: COLORES.mutedForeground, fontSize: 14 },
 
-  header:      { paddingHorizontal: 16, paddingBottom: 16 },
-  headerFila:  { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  backBtn:     { width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  headerTitulo: { fontSize: 18, fontWeight: '700', color: '#fff' },
-  headerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 1 },
-  syncBtn:     { width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  buscadorCaja: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', margin: 12, marginBottom: 0 },
+  buscador:     { flex: 1, paddingHorizontal: 10, paddingVertical: 12, fontSize: 14, color: COLORES.foreground },
 
-  buscadorCaja: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden' },
-  buscador:    { flex: 1, paddingHorizontal: 10, paddingVertical: 12, fontSize: 14, color: COLORES.foreground },
-
-  bannerPendientes: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF9C4', paddingHorizontal: 16, paddingVertical: 10, gap: 8, borderBottomWidth: 1, borderBottomColor: '#F9A825' },
+  bannerPendientes: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF9C4', paddingHorizontal: 16, paddingVertical: 10, gap: 8, marginTop: 10, borderRadius: 12, marginHorizontal: 12, borderWidth: 1, borderColor: '#F9A825' },
   bannerTexto:      { flex: 1, color: '#F57F17', fontSize: 13 },
   bannerAccion:     { color: COLORES.primario, fontWeight: '700', fontSize: 13 },
 
@@ -464,10 +475,10 @@ const styles = StyleSheet.create({
   cardNombre: { fontSize: 15, fontWeight: '700', color: COLORES.oscuro },
   cardCedula: { fontSize: 12, color: COLORES.mutedForeground, marginTop: 2 },
 
-  badge:       { flexDirection: 'row', alignItems: 'center', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, gap: 3 },
-  badgeSync:   { backgroundColor: COLORES.exito },
-  badgePend:   { backgroundColor: '#FF8F00' },
-  badgeTexto:  { color: '#fff', fontSize: 9, fontWeight: '700' },
+  badge:      { flexDirection: 'row', alignItems: 'center', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, gap: 3 },
+  badgeSync:  { backgroundColor: COLORES.exito },
+  badgePend:  { backgroundColor: '#FF8F00' },
+  badgeTexto: { color: '#fff', fontSize: 9, fontWeight: '700' },
 
   cardBody:   { padding: 14, paddingTop: 10, paddingBottom: 8 },
   cardMotivo: { fontSize: 13, color: COLORES.mutedForeground, lineHeight: 18 },
@@ -478,11 +489,10 @@ const styles = StyleSheet.create({
   cardFecha:  { flex: 1, fontSize: 11, color: COLORES.mutedForeground },
   cardVerMas: { fontSize: 12, color: COLORES.primario, fontWeight: '600' },
 
-  vacioCont:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40, marginTop: 60 },
+  vacioCont:   { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40, marginTop: 60 },
   vacioTitulo: { fontSize: 17, fontWeight: '700', color: COLORES.oscuro, marginTop: 16, marginBottom: 6 },
-  vacioSub:   { fontSize: 13, color: COLORES.mutedForeground, textAlign: 'center', lineHeight: 20 },
+  vacioSub:    { fontSize: 13, color: COLORES.mutedForeground, textAlign: 'center', lineHeight: 20 },
 
-  // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(13,59,68,0.7)', justifyContent: 'flex-end' },
   modalCaja:    { backgroundColor: COLORES.fondo, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%' },
   modalHeader:  { padding: 20, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
@@ -494,7 +504,7 @@ const styles = StyleSheet.create({
   modalFecha:   { fontSize: 12, color: 'rgba(255,255,255,0.7)' },
   modalScroll:  { padding: 16, paddingBottom: 40 },
 
-  seccionModal: { backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 12, elevation: 1 },
+  seccionModal:       { backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 12, elevation: 1 },
   seccionModalHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   seccionModalTitulo: { fontSize: 13, fontWeight: '700', color: COLORES.oscuro, textTransform: 'uppercase', letterSpacing: 0.5 },
 
@@ -502,18 +512,21 @@ const styles = StyleSheet.create({
   filaLabel:   { width: 110, fontSize: 12, color: COLORES.mutedForeground, fontWeight: '600' },
   filaValor:   { flex: 1, fontSize: 13, color: COLORES.foreground },
 
-  examenFila:     { marginBottom: 10 },
+  examenFila:      { marginBottom: 10 },
   examenSubtitulo: { fontSize: 10, fontWeight: '700', color: COLORES.primario, letterSpacing: 0.5, marginBottom: 4 },
-  examenOjos:     { flexDirection: 'row', gap: 20 },
-  examenOjo:      { fontSize: 13, fontWeight: '600' },
+  examenOjos:      { flexDirection: 'row', gap: 20 },
+  examenOjo:       { fontSize: 13, fontWeight: '600' },
 
   tablaRefraccion: { borderWidth: 1, borderColor: COLORES.borde, borderRadius: 10, overflow: 'hidden', marginVertical: 8 },
   tablaHeaderFila: { flexDirection: 'row', backgroundColor: COLORES.muted, padding: 8 },
   tablaHeaderOjo:  { flex: 1, fontWeight: '700', fontSize: 12, textAlign: 'center' },
-  tablaFila:       { flexDirection: 'row', borderTopWidth: 1, borderTopColor: COLORES.morde, padding: 8 },
+  tablaFila:       { flexDirection: 'row', borderTopWidth: 1, borderTopColor: COLORES.borde, padding: 8 },
   tablaCeldaLabel: { flex: 1, fontSize: 12, color: COLORES.mutedForeground, fontWeight: '600' },
   tablaCeldaValor: { flex: 1, fontSize: 13, textAlign: 'center', fontWeight: '600' },
-modalBotones:        { flexDirection: 'row', gap: 10, padding: 16, paddingBottom: 30 },
+
+  modalBtnReceta:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORES.primario, borderRadius: 14, paddingVertical: 13, marginHorizontal: 16, marginTop: 16 },
+  modalBtnRecetaTexto: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  modalBotones:        { flexDirection: 'row', gap: 10, padding: 16, paddingBottom: 30, paddingTop: 10 },
   modalBtnEditar:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderColor: COLORES.primario, borderRadius: 14, paddingVertical: 13 },
   modalBtnEditarTexto: { color: COLORES.primario, fontWeight: '700', fontSize: 14 },
   modalBtnBorrar:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderColor: COLORES.error, borderRadius: 14, paddingVertical: 13 },

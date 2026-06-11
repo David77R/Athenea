@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  FlatList, ActivityIndicator, Alert, KeyboardAvoidingView,
+  FlatList, ActivityIndicator, KeyboardAvoidingView,
   Platform, Modal, ScrollView
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,6 +11,7 @@ import { buscarHistoriasLocales } from '../baseDatosLite/basedatoslt';
 import CONFIG from '../config';
 import COLORES from '../constantes/colores';
 import HeaderConDrawer from '../componentes/HeaderConDrawer';
+import { useAlerta } from '../componentes/AlertaPersonalizada';
 
 export default function BuscarPacienteScreen({ navigation, setToken }) {
   const [cedula,       setCedula]       = useState('');
@@ -19,7 +20,6 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
   const [buscado,      setBuscado]      = useState(false);
   const [fuenteLocal,  setFuenteLocal]  = useState(false);
 
-  // Modal registro
   const [modalVisible,  setModalVisible]  = useState(false);
   const [guardando,     setGuardando]     = useState(false);
   const [formNombre,    setFormNombre]    = useState('');
@@ -28,10 +28,18 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
   const [formTelefono,  setFormTelefono]  = useState('');
   const [formOcupacion, setFormOcupacion] = useState('');
 
+  const { mostrar, AlertaPersonalizada } = useAlerta();
+
   // ─── Buscar ──────────────────────────────────────────────────────────────
   async function buscar() {
     if (!cedula.trim()) {
-      Alert.alert('Campo requerido', 'Ingresa una cédula o nombre para buscar.');
+      mostrar({
+        tipo:   'error',
+        titulo: 'Campo requerido',
+        mensaje: 'Ingresa una cédula o nombre para buscar.',
+        icono:  'search-outline',
+        boton:  'Entendido',
+      });
       return;
     }
     setBuscando(true);
@@ -39,12 +47,12 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
     setResultados([]);
     setFuenteLocal(false);
 
-    const termino = cedula.trim();
+    const termino  = cedula.trim();
     const esNumero = /^\d+$/.test(termino);
 
     try {
       const token = await AsyncStorage.getItem('token');
-      const url = esNumero
+      const url   = esNumero
         ? `${CONFIG.CLINICAL_URL}/historias?cedula=${termino}`
         : `${CONFIG.CLINICAL_URL}/historias?nombre=${termino}`;
 
@@ -66,7 +74,7 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
 
     // Fallback local
     try {
-      const locales = await buscarHistoriasLocales(termino);
+      const locales   = await buscarHistoriasLocales(termino);
       const parseadas = locales.map(item => {
         try {
           const d = JSON.parse(item.datos);
@@ -106,53 +114,71 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
   // ─── Registrar paciente nuevo ─────────────────────────────────────────────
   async function registrarPaciente() {
     if (!formNombre.trim() || !formApellido.trim()) {
-      Alert.alert('Campos requeridos', 'El nombre y apellido son obligatorios.');
+      mostrar({
+        tipo:   'error',
+        titulo: 'Campos requeridos',
+        mensaje: 'El nombre y apellido son obligatorios.',
+        icono:  'alert-circle-outline',
+        boton:  'Entendido',
+      });
       return;
     }
     setGuardando(true);
     try {
       const token = await AsyncStorage.getItem('token');
       const resp  = await fetch(`${CONFIG.API_URL}/api/pacientes`, {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
+        body:    JSON.stringify({
           cedula:    cedula.trim(),
           nombre:    formNombre.trim(),
           apellido:  formApellido.trim(),
           edad:      formEdad ? Number(formEdad) : undefined,
-          telefono:  formTelefono.trim()   || undefined,
-          ocupacion: formOcupacion.trim()  || undefined,
+          telefono:  formTelefono.trim()  || undefined,
+          ocupacion: formOcupacion.trim() || undefined,
         }),
       });
 
       const ok = resp.ok || resp.status === 409;
       setModalVisible(false);
 
-      Alert.alert(
-        ok ? (resp.status === 409 ? 'Paciente ya existe' : '✅ Registrado') : 'Error',
-        ok
-          ? '¿Deseas crear una historia clínica ahora?'
-          : 'No se pudo registrar el paciente.',
-        ok ? [
-          { text: 'No por ahora', style: 'cancel' },
-          {
-            text: 'Crear historia',
-            onPress: () => navigation.navigate('Formulario', {
-              datosIA: {
-                paciente: {
-                  nombre:    `${formNombre.trim()} ${formApellido.trim()}`,
-                  cedula:    cedula.trim(),
-                  telefono:  formTelefono.trim(),
-                  ocupacion: formOcupacion.trim(),
-                  edad:      formEdad,
-                },
+      if (ok) {
+        mostrar({
+          tipo:           'confirmacion',
+          titulo:         resp.status === 409 ? 'Paciente ya existe' : '¡Paciente registrado!',
+          mensaje:        '¿Deseas crear una historia clínica ahora?',
+          icono:          resp.status === 409 ? 'person-outline' : 'checkmark-circle-outline',
+          botonCancelar:  'No por ahora',
+          botonConfirmar: 'Crear historia',
+          onConfirmar:    () => navigation.navigate('Formulario', {
+            datosIA: {
+              paciente: {
+                nombre:    `${formNombre.trim()} ${formApellido.trim()}`,
+                cedula:    cedula.trim(),
+                telefono:  formTelefono.trim(),
+                ocupacion: formOcupacion.trim(),
+                edad:      formEdad,
               },
-            }),
-          },
-        ] : [{ text: 'OK' }]
-      );
+            },
+          }),
+        });
+      } else {
+        mostrar({
+          tipo:   'error',
+          titulo: 'Error al registrar',
+          mensaje: 'No se pudo registrar el paciente. Intenta de nuevo.',
+          icono:  'alert-circle-outline',
+          boton:  'Entendido',
+        });
+      }
     } catch {
-      Alert.alert('Sin conexión', 'No se pudo conectar al servidor.');
+      mostrar({
+        tipo:   'error',
+        titulo: 'Sin conexión',
+        mensaje: 'No se pudo conectar al servidor.',
+        icono:  'cloud-offline-outline',
+        boton:  'Entendido',
+      });
     } finally {
       setGuardando(false);
     }
@@ -208,17 +234,14 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
         <View style={styles.cardBotones}>
           <TouchableOpacity
             style={styles.btnVer}
-            onPress={() =>
-              navigation.navigate('HistorialClinico', {
-                cedula: item.paciente?.cedula || cedula,
-              })
-            }
+            onPress={() => navigation.navigate('HistorialClinico', {
+              cedula: item.paciente?.cedula || cedula,
+            })}
           >
             <Ionicons name="document-text-outline" size={14} color={COLORES.primario} />
             <Text style={styles.btnVerTexto}>Ver historial</Text>
           </TouchableOpacity>
 
-          {/* ── FIX: pasa pacientePreseleccionado a Grabacion ── */}
           <TouchableOpacity
             style={styles.btnNueva}
             onPress={() => navigation.navigate('Grabacion', {
@@ -237,7 +260,6 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
     );
   }
 
-  // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: COLORES.fondo }}
@@ -253,12 +275,7 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
       <View style={styles.buscadorContenedor}>
         <View style={styles.buscadorFila}>
           <View style={styles.buscadorCaja}>
-            <Ionicons
-              name="search-outline"
-              size={16}
-              color={COLORES.mutedForeground}
-              style={{ marginLeft: 12 }}
-            />
+            <Ionicons name="search-outline" size={16} color={COLORES.mutedForeground} style={{ marginLeft: 12 }} />
             <TextInput
               style={styles.buscadorInput}
               placeholder="Nombre o número de cédula..."
@@ -291,13 +308,11 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
       {fuenteLocal && (
         <View style={styles.bannerLocal}>
           <Ionicons name="wifi-outline" size={14} color="#F57F17" />
-          <Text style={styles.bannerLocalTexto}>
-            Sin conexión — mostrando resultados locales
-          </Text>
+          <Text style={styles.bannerLocalTexto}>Sin conexión — mostrando resultados locales</Text>
         </View>
       )}
 
-      {/* Contador de resultados */}
+      {/* Contador */}
       {buscado && !buscando && (
         <View style={styles.contadorFila}>
           <Text style={styles.contadorTexto}>
@@ -308,7 +323,6 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
         </View>
       )}
 
-      {/* Lista de resultados */}
       <FlatList
         data={resultados}
         keyExtractor={(item) => item._id || item.id || String(Math.random())}
@@ -320,9 +334,7 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
             <View style={styles.vacioCont}>
               <Ionicons name="search-outline" size={60} color={COLORES.borde} />
               <Text style={styles.vacioTitulo}>No se encontraron historias</Text>
-              <Text style={styles.vacioSub}>
-                No hay historias clínicas para la cédula {cedula}
-              </Text>
+              <Text style={styles.vacioSub}>No hay historias clínicas para "{cedula}"</Text>
               <TouchableOpacity style={styles.btnRegistrar} onPress={abrirModal}>
                 <Ionicons name="person-add-outline" size={16} color="#fff" />
                 <Text style={styles.btnRegistrarTexto}>Registrar paciente nuevo</Text>
@@ -341,26 +353,15 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
       />
 
       {/* Modal registro nuevo paciente */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setModalVisible(false)}
-      >
+      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCaja}>
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.modalBarra} />
 
               <View style={styles.modalHeaderFila}>
                 <Text style={styles.modalTitulo}>Registrar paciente</Text>
-                <TouchableOpacity
-                  onPress={() => setModalVisible(false)}
-                  style={styles.modalCerrarBtn}
-                >
+                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.modalCerrarBtn}>
                   <Ionicons name="close" size={20} color={COLORES.mutedForeground} />
                 </TouchableOpacity>
               </View>
@@ -411,8 +412,7 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
               >
                 <LinearGradient
                   colors={[COLORES.primario, COLORES.gradienteFin]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={styles.modalBtnGrad}
                 >
                   {guardando
@@ -421,76 +421,53 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
                 </LinearGradient>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.modalBtnCancelar}
-                onPress={() => setModalVisible(false)}
-              >
+              <TouchableOpacity style={styles.modalBtnCancelar} onPress={() => setModalVisible(false)}>
                 <Text style={styles.modalBtnCancelarTexto}>Cancelar</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
       </Modal>
+
+      <AlertaPersonalizada />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  buscadorContenedor: {
-    paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: COLORES.borde,
-  },
+  buscadorContenedor: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: COLORES.borde },
   buscadorFila:  { flexDirection: 'row', gap: 10 },
-  buscadorCaja:  {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORES.muted, borderRadius: 14,
-    borderWidth: 1.5, borderColor: COLORES.borde,
-  },
-  buscadorInput: {
-    flex: 1, paddingHorizontal: 10, paddingVertical: 13,
-    fontSize: 15, color: COLORES.foreground,
-  },
-  btnBuscar: {
-    backgroundColor: COLORES.primario, borderRadius: 14,
-    paddingHorizontal: 18, justifyContent: 'center', alignItems: 'center',
-  },
-  btnBuscarTexto: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  buscadorCaja:  { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.muted, borderRadius: 14, borderWidth: 1.5, borderColor: COLORES.borde },
+  buscadorInput: { flex: 1, paddingHorizontal: 10, paddingVertical: 13, fontSize: 15, color: COLORES.foreground },
+  btnBuscar:     { backgroundColor: COLORES.primario, borderRadius: 14, paddingHorizontal: 18, justifyContent: 'center', alignItems: 'center' },
+  btnBuscarTexto:{ color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  bannerLocal: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#FFF9C4', paddingHorizontal: 16, paddingVertical: 10,
-    gap: 8, borderBottomWidth: 1, borderBottomColor: '#F9A825',
-  },
-  bannerLocalTexto: { color: '#F57F17', fontSize: 13 },
+  bannerLocal:     { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF9C4', paddingHorizontal: 16, paddingVertical: 10, gap: 8, borderBottomWidth: 1, borderBottomColor: '#F9A825' },
+  bannerLocalTexto:{ color: '#F57F17', fontSize: 13 },
 
   contadorFila:  { paddingHorizontal: 16, paddingVertical: 10 },
   contadorTexto: { fontSize: 13, color: COLORES.mutedForeground, fontWeight: '600' },
 
   lista: { padding: 14, paddingBottom: 40, flexGrow: 1 },
 
-  card: {
-    backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12,
-    elevation: 3, shadowColor: '#000', shadowOpacity: 0.06,
-    shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
-  },
-  cardHeader:       { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  cardAvatar:       { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORES.secundario, justifyContent: 'center', alignItems: 'center' },
-  cardAvatarTexto:  { fontSize: 18, fontWeight: '700', color: COLORES.primario },
-  cardNombre:       { fontSize: 15, fontWeight: '700', color: COLORES.oscuro },
-  cardCedula:       { fontSize: 12, color: COLORES.mutedForeground, marginTop: 2 },
-  cardFecha:        { fontSize: 11, color: COLORES.mutedForeground },
-  divider:          { height: 1, backgroundColor: COLORES.muted, marginBottom: 10 },
-  cardMotivo:       { fontSize: 13, color: COLORES.mutedForeground, lineHeight: 20, marginBottom: 10 },
-  cardBadgeDx:      { backgroundColor: COLORES.secundario, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 12 },
-  cardBadgeDxTexto: { fontSize: 12, color: COLORES.primario, fontWeight: '600' },
-  cardBotones:      { flexDirection: 'row', gap: 8 },
-  btnVer:           { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderColor: COLORES.primario, borderRadius: 12, paddingVertical: 10 },
-  btnVerTexto:      { color: COLORES.primario, fontWeight: '600', fontSize: 13 },
-  btnNueva:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORES.primario, borderRadius: 12, paddingVertical: 10 },
-  btnNuevaTexto:    { color: '#fff', fontWeight: '600', fontSize: 13 },
-  badgeLocal:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF8F00', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3, gap: 3 },
-  badgeLocalTexto:  { color: '#fff', fontSize: 9, fontWeight: '700' },
+  card:            { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12, elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  cardHeader:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  cardAvatar:      { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORES.secundario, justifyContent: 'center', alignItems: 'center' },
+  cardAvatarTexto: { fontSize: 18, fontWeight: '700', color: COLORES.primario },
+  cardNombre:      { fontSize: 15, fontWeight: '700', color: COLORES.oscuro },
+  cardCedula:      { fontSize: 12, color: COLORES.mutedForeground, marginTop: 2 },
+  cardFecha:       { fontSize: 11, color: COLORES.mutedForeground },
+  divider:         { height: 1, backgroundColor: COLORES.muted, marginBottom: 10 },
+  cardMotivo:      { fontSize: 13, color: COLORES.mutedForeground, lineHeight: 20, marginBottom: 10 },
+  cardBadgeDx:     { backgroundColor: COLORES.secundario, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 12 },
+  cardBadgeDxTexto:{ fontSize: 12, color: COLORES.primario, fontWeight: '600' },
+  cardBotones:     { flexDirection: 'row', gap: 8 },
+  btnVer:          { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderColor: COLORES.primario, borderRadius: 12, paddingVertical: 10 },
+  btnVerTexto:     { color: COLORES.primario, fontWeight: '600', fontSize: 13 },
+  btnNueva:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORES.primario, borderRadius: 12, paddingVertical: 10 },
+  btnNuevaTexto:   { color: '#fff', fontWeight: '600', fontSize: 13 },
+  badgeLocal:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF8F00', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3, gap: 3 },
+  badgeLocalTexto: { color: '#fff', fontSize: 9, fontWeight: '700' },
 
   vacioCont:         { flex: 1, alignItems: 'center', paddingTop: 60, paddingHorizontal: 30 },
   vacioTitulo:       { fontSize: 17, fontWeight: '700', color: COLORES.oscuro, marginTop: 16, marginBottom: 6 },
@@ -498,20 +475,20 @@ const styles = StyleSheet.create({
   btnRegistrar:      { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.primario, borderRadius: 14, paddingHorizontal: 24, paddingVertical: 14, gap: 8 },
   btnRegistrarTexto: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
-  modalOverlay:         { flex: 1, backgroundColor: 'rgba(13,59,68,0.7)', justifyContent: 'flex-end' },
-  modalCaja:            { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40, maxHeight: '90%' },
-  modalBarra:           { width: 50, height: 5, backgroundColor: COLORES.borde, borderRadius: 3, alignSelf: 'center', marginBottom: 20 },
-  modalHeaderFila:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitulo:          { fontSize: 18, fontWeight: '700', color: COLORES.oscuro },
-  modalCerrarBtn:       { width: 32, height: 32, backgroundColor: COLORES.muted, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  modalCedulaBadge:     { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.secundario, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 20, gap: 8 },
-  modalCedulaLabel:     { fontSize: 12, color: COLORES.mutedForeground, fontWeight: '600' },
-  modalCedulaValor:     { fontSize: 16, fontWeight: '700', color: COLORES.primario },
-  modalLabel:           { fontSize: 11, color: COLORES.mutedForeground, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  modalInput:           { borderWidth: 1.5, borderColor: COLORES.borde, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: COLORES.foreground, backgroundColor: COLORES.muted },
-  modalBtnGuardar:      { borderRadius: 14, overflow: 'hidden', marginTop: 8, marginBottom: 10 },
-  modalBtnGrad:         { paddingVertical: 15, alignItems: 'center' },
-  modalBtnTexto:        { color: '#fff', fontWeight: '700', fontSize: 16 },
-  modalBtnCancelar:     { borderWidth: 1.5, borderColor: COLORES.borde, borderRadius: 14, paddingVertical: 13, alignItems: 'center' },
-  modalBtnCancelarTexto:{ color: COLORES.mutedForeground, fontWeight: '600', fontSize: 15 },
+  modalOverlay:          { flex: 1, backgroundColor: 'rgba(13,59,68,0.7)', justifyContent: 'flex-end' },
+  modalCaja:             { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40, maxHeight: '90%' },
+  modalBarra:            { width: 50, height: 5, backgroundColor: COLORES.borde, borderRadius: 3, alignSelf: 'center', marginBottom: 20 },
+  modalHeaderFila:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitulo:           { fontSize: 18, fontWeight: '700', color: COLORES.oscuro },
+  modalCerrarBtn:        { width: 32, height: 32, backgroundColor: COLORES.muted, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  modalCedulaBadge:      { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.secundario, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 20, gap: 8 },
+  modalCedulaLabel:      { fontSize: 12, color: COLORES.mutedForeground, fontWeight: '600' },
+  modalCedulaValor:      { fontSize: 16, fontWeight: '700', color: COLORES.primario },
+  modalLabel:            { fontSize: 11, color: COLORES.mutedForeground, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  modalInput:            { borderWidth: 1.5, borderColor: COLORES.borde, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: COLORES.foreground, backgroundColor: COLORES.muted },
+  modalBtnGuardar:       { borderRadius: 14, overflow: 'hidden', marginTop: 8, marginBottom: 10 },
+  modalBtnGrad:          { paddingVertical: 15, alignItems: 'center' },
+  modalBtnTexto:         { color: '#fff', fontWeight: '700', fontSize: 16 },
+  modalBtnCancelar:      { borderWidth: 1.5, borderColor: COLORES.borde, borderRadius: 14, paddingVertical: 13, alignItems: 'center' },
+  modalBtnCancelarTexto: { color: COLORES.mutedForeground, fontWeight: '600', fontSize: 15 },
 });

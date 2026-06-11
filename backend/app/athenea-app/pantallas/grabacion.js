@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, ScrollView,
+  ActivityIndicator, ScrollView,
   Platform, StatusBar, Animated
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,9 +9,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import CONFIG from '../config';
 import COLORES from '../constantes/colores';
+import { useAlerta } from '../componentes/AlertaPersonalizada';
 
 export default function GrabacionScreen({ navigation, route }) {
-  // ─── Paciente preseleccionado desde BuscarPaciente ──────────────────────
   const pacientePreseleccionado = route?.params?.pacientePreseleccionado || null;
 
   const [grabando,            setGrabando]            = useState(false);
@@ -24,6 +24,8 @@ export default function GrabacionScreen({ navigation, route }) {
   const grabacionRef = useRef(null);
   const intervalRef  = useRef(null);
   const pulsoAnim    = useRef(new Animated.Value(1)).current;
+
+  const { mostrar, AlertaPersonalizada } = useAlerta();
 
   // ─── Animación de pulso ──────────────────────────────────────────────────
   function iniciarPulso() {
@@ -45,7 +47,13 @@ export default function GrabacionScreen({ navigation, route }) {
     try {
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso denegado', 'Necesita permitir el acceso al micrófono.');
+        mostrar({
+          tipo:   'error',
+          titulo: 'Permiso denegado',
+          mensaje: 'Necesita permitir el acceso al micrófono para grabar.',
+          icono:  'mic-off-outline',
+          boton:  'Entendido',
+        });
         return;
       }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
@@ -63,7 +71,13 @@ export default function GrabacionScreen({ navigation, route }) {
 
       intervalRef.current = setInterval(() => setDuracion((d) => d + 1), 1000);
     } catch {
-      Alert.alert('Error', 'No se pudo iniciar la grabación.');
+      mostrar({
+        tipo:   'error',
+        titulo: 'Error al grabar',
+        mensaje: 'No se pudo iniciar la grabación. Intenta de nuevo.',
+        icono:  'alert-circle-outline',
+        boton:  'Entendido',
+      });
     }
   }
 
@@ -95,22 +109,19 @@ export default function GrabacionScreen({ navigation, route }) {
         setTextoTranscrito('Error al transcribir. Intente de nuevo.');
       }
     } catch {
-      Alert.alert(
-        'Servidor no disponible',
-        'Athenea sigue despertándose...\n¿Deseas registrar la historia manualmente?',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Registro manual',
-            onPress: () => navigation.navigate('Formulario', {
-              // ← pasa el paciente incluso en fallback manual
-              datosIA: pacientePreseleccionado
-                ? { paciente: pacientePreseleccionado }
-                : undefined,
-            }),
-          },
-        ]
-      );
+      mostrar({
+        tipo:           'confirmacion',
+        titulo:         'Servidor no disponible',
+        mensaje:        'Athenea sigue despertándose... ¿Deseas registrar la historia manualmente?',
+        icono:          'cloud-offline-outline',
+        botonCancelar:  'Cancelar',
+        botonConfirmar: 'Registro manual',
+        onConfirmar:    () => navigation.navigate('Formulario', {
+          datosIA: pacientePreseleccionado
+            ? { paciente: pacientePreseleccionado }
+            : undefined,
+        }),
+      });
     } finally {
       setProcesando(false);
       setEtapaProceso('');
@@ -132,12 +143,11 @@ export default function GrabacionScreen({ navigation, route }) {
       if (resp.ok) {
         const datosIA = await resp.json();
 
-        // Si viene paciente preseleccionado y Groq no detectó cédula/nombre, inyectar
         if (pacientePreseleccionado) {
-          if (!datosIA.paciente)               datosIA.paciente = {};
-          if (!datosIA.paciente.cedula)         datosIA.paciente.cedula   = pacientePreseleccionado.cedula;
-          if (!datosIA.paciente.nombre)         datosIA.paciente.nombre   = pacientePreseleccionado.nombre;
-          if (!datosIA.paciente.telefono)       datosIA.paciente.telefono = pacientePreseleccionado.telefono;
+          if (!datosIA.paciente)           datosIA.paciente = {};
+          if (!datosIA.paciente.cedula)    datosIA.paciente.cedula   = pacientePreseleccionado.cedula;
+          if (!datosIA.paciente.nombre)    datosIA.paciente.nombre   = pacientePreseleccionado.nombre;
+          if (!datosIA.paciente.telefono)  datosIA.paciente.telefono = pacientePreseleccionado.telefono;
         }
 
         navigation.navigate('Formulario', { textoIA: textoTranscrito, datosIA });
@@ -188,7 +198,6 @@ export default function GrabacionScreen({ navigation, route }) {
           </TouchableOpacity>
           <View style={styles.headerCentro}>
             <Text style={styles.headerTitulo}>Registro por Voz</Text>
-            {/* Si hay paciente preseleccionado, mostrar su nombre en el sub */}
             <Text style={styles.headerSub}>
               {pacientePreseleccionado
                 ? `Paciente: ${pacientePreseleccionado.nombre}`
@@ -327,6 +336,8 @@ export default function GrabacionScreen({ navigation, route }) {
         </View>
 
       </ScrollView>
+
+      <AlertaPersonalizada />
     </View>
   );
 }
@@ -340,37 +351,17 @@ const styles = StyleSheet.create({
   headerTitulo: { fontSize: 18, fontWeight: '700', color: '#fff' },
   headerSub:    { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
 
-  // ── Banner paciente preseleccionado ───────────────────────────────────────
-  bannerPaciente: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: COLORES.secundario,
-    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
-    marginBottom: 12,
-  },
+  bannerPaciente:      { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORES.secundario, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 12 },
   bannerPacienteTexto: { fontSize: 14, fontWeight: '600', color: COLORES.oscuro },
 
   scroll: { padding: 16, paddingBottom: 60 },
 
-  tarjeta: {
-    backgroundColor: '#fff', borderRadius: 24, padding: 24,
-    marginBottom: 16, alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 12, elevation: 4,
-  },
+  tarjeta: { backgroundColor: '#fff', borderRadius: 24, padding: 24, marginBottom: 16, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 4 },
 
-  circuloExterno: {
-    width: 150, height: 150, borderRadius: 75,
-    backgroundColor: COLORES.secundario,
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 20, borderWidth: 3, borderColor: COLORES.borde,
-  },
-  circuloExternoActivo: { backgroundColor: '#FFEBEE', borderColor: COLORES.error },
-  circuloInterno: {
-    width: 110, height: 110, borderRadius: 55,
-    backgroundColor: COLORES.muted,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  circuloInternoActivo: { backgroundColor: COLORES.error },
+  circuloExterno:      { width: 150, height: 150, borderRadius: 75, backgroundColor: COLORES.secundario, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderWidth: 3, borderColor: COLORES.borde },
+  circuloExternoActivo:{ backgroundColor: '#FFEBEE', borderColor: COLORES.error },
+  circuloInterno:      { width: 110, height: 110, borderRadius: 55, backgroundColor: COLORES.muted, justifyContent: 'center', alignItems: 'center' },
+  circuloInternoActivo:{ backgroundColor: COLORES.error },
 
   tiempoTexto:  { fontSize: 13, fontWeight: '700', color: '#fff', marginTop: 4 },
   estadoTexto:  { fontSize: 14, color: COLORES.mutedForeground, textAlign: 'center', marginBottom: 20 },
@@ -395,11 +386,7 @@ const styles = StyleSheet.create({
   btnReintentar:      { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORES.primario, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 20 },
   btnReintentarTexto: { color: COLORES.primario, fontSize: 14, fontWeight: '600' },
 
-  tarjetaConsejos: {
-    backgroundColor: '#fff', borderRadius: 20, padding: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
-  },
+  tarjetaConsejos: { backgroundColor: '#fff', borderRadius: 20, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
   consejosHeader:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   consejosTitle:   { fontSize: 14, fontWeight: '700', color: COLORES.oscuro },
   consejoFila:     { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10, gap: 10 },
