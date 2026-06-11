@@ -1,284 +1,259 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert, Platform, StatusBar
+  View, Text, StyleSheet, ScrollView,
+  TouchableOpacity, ActivityIndicator,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { obtenerTodasLasHistorias, obtenerHistoriasPendientes } from '../baseDatosLite/basedatoslt';
 import COLORES from '../constantes/colores';
-
-const CAMPOS = [
-  { key: 'nombre',       label: 'Nombre completo',  placeholder: 'Dr. Juan Pérez',        icono: 'person-outline'   },
-  { key: 'cedula',       label: 'Cédula / RIF',     placeholder: 'V-12345678',            icono: 'card-outline'     },
-  { key: 'especialidad', label: 'Especialidad',     placeholder: 'Optometrista',          icono: 'medical-outline'  },
-  { key: 'consultorio',  label: 'Consultorio',      placeholder: 'Centro Óptico Visión',  icono: 'business-outline' },
-  { key: 'telefono',     label: 'Teléfono',         placeholder: '0414-1234567',          icono: 'call-outline'     },
-  { key: 'email',        label: 'Correo electrónico', placeholder: 'doctor@correo.com',   icono: 'mail-outline'     },
-];
+import HeaderConDrawer from '../componentes/HeaderConDrawer';
+import { useAlerta } from '../componentes/AlertaPersonalizada';
+import CONFIG from '../config';
 
 export default function PerfilScreen({ navigation, setToken }) {
-  const [perfil,     setPerfil]     = useState({});
-  const [borrador,   setBorrador]   = useState({});
-  const [editando,   setEditando]   = useState(false);
-  const [guardando,  setGuardando]  = useState(false);
-  const [stats,      setStats]      = useState({ total: 0, pendientes: 0, sincronizadas: 0 });
+  const [perfil,          setPerfil]          = useState(null);
+  const [cargando,        setCargando]         = useState(true);
+  const [totalPacientes,  setTotalPacientes]   = useState(null);
+  const [cargandoStats,   setCargandoStats]    = useState(false);
 
-  useEffect(() => {
-    async function cargar() {
-      // Cargar perfil guardado
-      const raw = await AsyncStorage.getItem('perfil_especialista');
-      if (raw) {
-        const datos = JSON.parse(raw);
-        setPerfil(datos);
-        setBorrador(datos);
-      } else {
-        // Precargar desde AsyncStorage individual
-        const nombre = await AsyncStorage.getItem('nombre') || '';
-        const email  = await AsyncStorage.getItem('email')  || '';
-        const cedula = await AsyncStorage.getItem('cedula') || '';
-        const base   = { nombre, email, cedula };
-        setPerfil(base);
-        setBorrador(base);
-      }
+  const { mostrar, AlertaPersonalizada } = useAlerta();
 
-      // Stats
-      const todas      = await obtenerTodasLasHistorias();
-      const pendientes = await obtenerHistoriasPendientes();
-      setStats({
-        total:        todas.length,
-        pendientes:   pendientes.length,
-        sincronizadas: todas.length - pendientes.length,
-      });
-    }
-    cargar();
-  }, []);
+  // ── Carga perfil desde AsyncStorage ──────────────────────────────────────
+  useEffect(() => { cargarPerfil(); }, []);
 
-  async function guardarPerfil() {
-    setGuardando(true);
+  // ── Recarga estadísticas cada vez que vuelves a la pantalla ──────────────
+  useFocusEffect(
+    useCallback(() => {
+      cargarEstadisticas();
+    }, [])
+  );
+
+  async function cargarPerfil() {
     try {
-      await AsyncStorage.setItem('perfil_especialista', JSON.stringify(borrador));
-      // Sincronizar también los campos individuales más usados
-      if (borrador.nombre) await AsyncStorage.setItem('nombre', borrador.nombre);
-      if (borrador.email)  await AsyncStorage.setItem('email',  borrador.email);
-      setPerfil(borrador);
-      setEditando(false);
-      Alert.alert('✓ Guardado', 'Perfil actualizado correctamente.');
+      setCargando(true);
+      const nombre   = await AsyncStorage.getItem('nombre')   || '';
+      const email    = await AsyncStorage.getItem('email')    || '';
+      const rol      = await AsyncStorage.getItem('rol')      || 'Optometrista';
+      const telefono = await AsyncStorage.getItem('telefono') || '';
+
+      const raw   = await AsyncStorage.getItem('perfil_especialista');
+      const extra = raw ? JSON.parse(raw) : {};
+
+      setPerfil({
+        nombre:       extra.nombre       || nombre,
+        email:        extra.email        || email,
+        rol:          extra.rol          || rol,
+        telefono:     extra.telefono     || telefono,
+        especialidad: extra.especialidad || '',
+        consultorio:  extra.consultorio  || '',
+      });
     } catch {
-      Alert.alert('Error', 'No se pudo guardar el perfil.');
+      mostrar({
+        tipo: 'error',
+        titulo: 'Error',
+        mensaje: 'No se pudo cargar el perfil.',
+        boton: 'Entendido',
+      });
     } finally {
-      setGuardando(false);
+      setCargando(false);
     }
   }
 
-  async function cerrarSesion() {
-    Alert.alert(
-      'Cerrar sesión',
-      '¿Estás seguro de que deseas salir?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Cerrar sesión',
-          style: 'destructive',
-          onPress: async () => {
-            await AsyncStorage.multiRemove(['token', 'nombre', 'email', 'perfil_especialista']);
-            setToken(null);
-          },
-        },
-      ]
-    );
+  async function cargarEstadisticas() {
+    try {
+      setCargandoStats(true);
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const resp = await fetch(`${CONFIG.CLINICAL_URL}/historias`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (resp.ok) {
+        const historias = await resp.json();
+        // Pacientes únicos por cédula
+        const cedulas = new Set(historias.map(h => h.paciente?.cedula).filter(Boolean));
+        setTotalPacientes(cedulas.size);
+      }
+    } catch {
+      setTotalPacientes(null);
+    } finally {
+      setCargandoStats(false);
+    }
   }
 
-  const inicial = () => {
-    const n = perfil.nombre || '';
-    const partes = n.trim().split(' ');
-    if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase();
-    return partes[0]?.[0]?.toUpperCase() || 'A';
-  };
-
-  const paddingTop = Platform.OS === 'android' ? 48 : 60;
+  function cerrarSesion() {
+    mostrar({
+      tipo: 'confirmacion',
+      titulo: '¿Cerrar sesión?',
+      mensaje: '¿Estás seguro de que deseas salir de tu cuenta?',
+      icono: 'log-out-outline',
+      botonCancelar: 'Cancelar',
+      botonConfirmar: 'Cerrar sesión',
+    onConfirmar: async () => {
+  try {
+    const { borrarTodasLasHistorias } = await import('../baseDatosLite/basedatoslt');
+    await borrarTodasLasHistorias();
+    await AsyncStorage.multiRemove([
+      'token', 'nombre', 'email', 'rol',
+      'telefono', 'perfil_especialista', 'ultima_sincronizacion',
+    ]);
+  } catch(e) {
+    console.log('ERROR LOGOUT:', e.message);
+  }
+  setTimeout(() => setToken(null), 300);
+},
+    });
+  }
 
   return (
-    <View style={styles.raiz}>
-      <StatusBar barStyle="light-content" />
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 40 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header degradado */}
-        <LinearGradient
-          colors={[COLORES.gradienteInicio, COLORES.gradienteMedio]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={[styles.headerGrad, { paddingTop: paddingTop + 12 }]}
-        >
-          <View style={styles.headerFila}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-              <Ionicons name="chevron-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitulo}>Mi Perfil</Text>
-            <View style={{ width: 40 }} />
-          </View>
+    <View style={styles.contenedor}>
+      <HeaderConDrawer
+        navigation={navigation}
+        titulo="Mi Perfil"
+        subtitulo="Información de tu cuenta"
+        mostrarBack={true}
+      />
 
-          <View style={styles.avatarCaja}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarTexto}>{inicial()}</Text>
-            </View>
-            <Text style={styles.avatarNombre}>{perfil.nombre || 'Especialista'}</Text>
-            <Text style={styles.avatarEsp}>{perfil.especialidad || 'Optometría'}</Text>
-            {perfil.consultorio ? <Text style={styles.avatarConsultorio}>{perfil.consultorio}</Text> : null}
-          </View>
-        </LinearGradient>
+      <ScrollView contentContainerStyle={styles.cuerpo} showsVerticalScrollIndicator={false}>
 
-        {/* Stats flotantes */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNum}>{stats.total}</Text>
-            <Text style={styles.statLabel}>Consultas</Text>
-          </View>
-          <View style={[styles.statCard, styles.statBorde]}>
-            <Text style={[styles.statNum, stats.pendientes > 0 && { color: COLORES.advertencia }]}>
-              {stats.pendientes}
+        {/* Avatar */}
+        <View style={styles.avatarContenedor}>
+          <LinearGradient
+            colors={[COLORES.gradienteInicio, COLORES.gradienteFin]}
+            style={styles.avatarCirculo}
+          >
+            <Text style={styles.avatarLetra}>
+              {perfil?.nombre?.charAt(0)?.toUpperCase() || '?'}
             </Text>
-            <Text style={styles.statLabel}>Pendientes</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNum, { color: COLORES.exito }]}>{stats.sincronizadas}</Text>
-            <Text style={styles.statLabel}>Sincronizadas</Text>
-          </View>
-        </View>
-
-        {/* Datos del especialista */}
-        <View style={styles.seccion}>
-          <View style={styles.seccionHeaderFila}>
-            <Text style={styles.seccionTitulo}>Datos del especialista</Text>
-            {!editando && (
-              <TouchableOpacity onPress={() => setEditando(true)} style={styles.btnEditar}>
-                <Ionicons name="create-outline" size={14} color={COLORES.primario} />
-                <Text style={styles.btnEditarTexto}>Editar</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {CAMPOS.map(({ key, label, placeholder, icono }) => (
-            <View key={key} style={styles.campo}>
-              <View style={styles.campoLabelFila}>
-                <Ionicons name={icono} size={13} color={COLORES.mutedForeground} />
-                <Text style={styles.campoLabel}>{label}</Text>
+          </LinearGradient>
+          {perfil && (
+            <>
+              <Text style={styles.avatarNombre}>{perfil.nombre || 'Especialista'}</Text>
+              <View style={styles.rolBadge}>
+<Text style={styles.rolTexto}>{perfil.rol === 'optometrist' ? 'Especialista de Optometría' : perfil.rol || 'Optometrista'}</Text>
               </View>
-              {editando ? (
-                <TextInput
-                  style={styles.input}
-                  value={borrador[key] || ''}
-                  onChangeText={(v) => setBorrador((p) => ({ ...p, [key]: v }))}
-                  placeholder={placeholder}
-                  placeholderTextColor={COLORES.mutedForeground}
-                />
-              ) : (
-                <Text style={[styles.campoValor, !perfil[key] && { color: COLORES.mutedForeground }]}>
-                  {perfil[key] || 'No registrado'}
-                </Text>
-              )}
-            </View>
-          ))}
-
-          {editando && (
-            <View style={styles.editBotones}>
-              <TouchableOpacity
-                style={styles.btnCancelar}
-                onPress={() => { setBorrador(perfil); setEditando(false); }}
-              >
-                <Text style={styles.btnCancelarTexto}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.btnGuardar} onPress={guardarPerfil} disabled={guardando}>
-                <LinearGradient
-                  colors={[COLORES.primario, COLORES.gradienteFin]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={styles.btnGradiente}
-                >
-                  {guardando
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={styles.btnGuardarTexto}>Guardar</Text>}
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+            </>
           )}
         </View>
 
-        {/* Accesos rápidos */}
-        <View style={styles.seccion}>
-          {[
-            { label: 'Historial clínico', icono: 'document-text-outline', pantalla: 'HistorialClinico' },
-            { label: 'Ajustes',           icono: 'settings-outline',       pantalla: 'Ajustes' },
-          ].map(({ label, icono, pantalla }) => (
-            <TouchableOpacity
-              key={pantalla}
-              style={styles.accionFila}
-              onPress={() => navigation.navigate(pantalla)}
+        {/* Cargando */}
+        {cargando && (
+          <ActivityIndicator size="large" color={COLORES.primario} style={{ marginTop: 40 }} />
+        )}
+
+        {/* Tarjeta de estadísticas */}
+        {!cargando && (
+          <TouchableOpacity
+            style={styles.tarjetaStats}
+            onPress={() => navigation.navigate('HistorialClinico')}
+            activeOpacity={0.82}
+          >
+            <LinearGradient
+              colors={[COLORES.gradienteInicio, COLORES.gradienteFin]}
+              style={styles.statsGradiente}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
             >
-              <View style={styles.accionIconCaja}>
-                <Ionicons name={icono} size={18} color={COLORES.primario} />
+              <View style={styles.statsIcono}>
+                <Ionicons name="people-outline" size={28} color="#fff" />
               </View>
-              <Text style={styles.accionLabel}>{label}</Text>
-              <Ionicons name="chevron-forward" size={18} color={COLORES.mutedForeground} />
-            </TouchableOpacity>
-          ))}
-        </View>
+              <View style={styles.statsTextos}>
+                <Text style={styles.statsNumero}>
+                  {cargandoStats
+                    ? '—'
+                    : totalPacientes !== null
+                      ? totalPacientes
+                      : '—'}
+                </Text>
+                <Text style={styles.statsLabel}>Pacientes registrados</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {/* Datos del perfil */}
+        {!cargando && perfil && (
+          <View style={styles.tarjeta}>
+            <FilaDato icono="person-outline"   label="Nombre"       valor={perfil.nombre} />
+            <FilaDato icono="mail-outline"     label="Correo"       valor={perfil.email} />
+            <FilaDato icono="shield-outline"   label="Rol"          valor={perfil.rol === 'optometrist' ? 'Especialista de Optometría' : perfil.rol} />
+            {perfil.telefono     ? <FilaDato icono="call-outline"     label="Teléfono"     valor={perfil.telefono} /> : null}
+            {perfil.especialidad ? <FilaDato icono="medical-outline"  label="Especialidad" valor={perfil.especialidad} /> : null}
+            {perfil.consultorio  ? <FilaDato icono="business-outline" label="Consultorio"  valor={perfil.consultorio} ultimo /> : null}
+          </View>
+        )}
 
         {/* Cerrar sesión */}
-        <TouchableOpacity style={styles.btnCerrarSesion} onPress={cerrarSesion}>
-          <Ionicons name="log-out-outline" size={18} color={COLORES.error} />
-          <Text style={styles.btnCerrarSesionTexto}>Cerrar sesión</Text>
-        </TouchableOpacity>
+        {!cargando && (
+          <TouchableOpacity style={styles.btnCerrar} onPress={cerrarSesion} activeOpacity={0.85}>
+            <Ionicons name="log-out-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.btnCerrarTexto}>Cerrar sesión</Text>
+          </TouchableOpacity>
+        )}
+
       </ScrollView>
+
+      <AlertaPersonalizada />
+    </View>
+  );
+}
+
+function FilaDato({ icono, label, valor, ultimo }) {
+  if (!valor) return null;
+  return (
+    <View style={[styles.fila, ultimo && { borderBottomWidth: 0 }]}>
+      <View style={styles.filaIzq}>
+        <Ionicons name={icono} size={16} color={COLORES.primario} style={{ marginRight: 8 }} />
+        <Text style={styles.filaLabel}>{label}</Text>
+      </View>
+      <Text style={styles.filaValor}>{valor}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  raiz: { flex: 1, backgroundColor: COLORES.fondo },
+  contenedor: { flex: 1, backgroundColor: COLORES.fondo },
+  cuerpo:     { padding: 16, paddingBottom: 50 },
 
-  headerGrad:  { paddingHorizontal: 20, paddingBottom: 28 },
-  headerFila:  { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  backBtn:     { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
-  headerTitulo: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: '#fff' },
+  avatarContenedor: { alignItems: 'center', paddingVertical: 28 },
+  avatarCirculo:    { width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+  avatarLetra:      { fontSize: 38, fontWeight: '800', color: '#fff' },
+  avatarNombre:     { fontSize: 20, fontWeight: '700', color: COLORES.oscuro, marginBottom: 6 },
+  rolBadge:         { backgroundColor: COLORES.secundario, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 4 },
+  rolTexto:         { fontSize: 13, fontWeight: '600', color: COLORES.primario },
 
-  avatarCaja:       { alignItems: 'center' },
-  avatar:           { width: 84, height: 84, borderRadius: 42, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: 'rgba(255,255,255,0.4)', marginBottom: 12 },
-  avatarTexto:      { fontSize: 32, fontWeight: '800', color: '#fff' },
-  avatarNombre:     { fontSize: 20, fontWeight: '700', color: '#fff' },
-  avatarEsp:        { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
-  avatarConsultorio: { fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 2 },
+  // Tarjeta de estadísticas
+  tarjetaStats: {
+    borderRadius: 20, marginBottom: 16,
+    elevation: 4, shadowColor: COLORES.primario, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+  },
+  statsGradiente: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 20, padding: 20, gap: 14,
+  },
+  statsIcono: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  statsTextos:  { flex: 1 },
+  statsNumero:  { fontSize: 32, fontWeight: '800', color: '#fff', lineHeight: 36 },
+  statsLabel:   { fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: '500', marginTop: 2 },
 
-  statsRow:  { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, marginTop: -20, borderRadius: 20, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 2 }, elevation: 5, marginBottom: 16 },
-  statCard:  { flex: 1, alignItems: 'center', paddingVertical: 16 },
-  statBorde: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: COLORES.borde },
-  statNum:   { fontSize: 22, fontWeight: '800', color: COLORES.primario },
-  statLabel: { fontSize: 11, color: COLORES.mutedForeground, marginTop: 2 },
+  // Tarjeta de datos
+  tarjeta: {
+    backgroundColor: '#fff', borderRadius: 20, padding: 8, marginBottom: 20,
+    elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
+  },
+  fila:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: COLORES.muted },
+  filaIzq:   { flexDirection: 'row', alignItems: 'center' },
+  filaLabel: { fontSize: 14, color: COLORES.mutedForeground, fontWeight: '600' },
+  filaValor: { fontSize: 14, color: COLORES.oscuro, fontWeight: '500', flexShrink: 1, textAlign: 'right', marginLeft: 12 },
 
-  seccion: { backgroundColor: '#fff', borderRadius: 20, marginHorizontal: 16, marginBottom: 12, padding: 16, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 1 }, elevation: 2 },
-  seccionHeaderFila: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  seccionTitulo:     { fontSize: 15, fontWeight: '700', color: COLORES.foreground },
-  btnEditar:         { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.secundario, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6, gap: 5 },
-  btnEditarTexto:    { color: COLORES.primario, fontWeight: '700', fontSize: 13 },
-
-  campo:         { marginBottom: 12 },
-  campoLabelFila: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
-  campoLabel:    { fontSize: 11, color: COLORES.mutedForeground, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
-  campoValor:    { fontSize: 14, color: COLORES.foreground },
-  input:         { borderWidth: 1.5, borderColor: COLORES.primario, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: COLORES.foreground, backgroundColor: COLORES.muted },
-
-  editBotones:       { flexDirection: 'row', gap: 10, marginTop: 8 },
-  btnCancelar:       { flex: 1, borderWidth: 1.5, borderColor: COLORES.borde, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  btnCancelarTexto:  { color: COLORES.mutedForeground, fontWeight: '600' },
-  btnGuardar:        { flex: 1, borderRadius: 12, overflow: 'hidden' },
-  btnGradiente:      { paddingVertical: 12, alignItems: 'center' },
-  btnGuardarTexto:   { color: '#fff', fontWeight: '700' },
-
-  accionFila:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORES.muted, gap: 12 },
-  accionIconCaja: { width: 34, height: 34, borderRadius: 10, backgroundColor: COLORES.secundario, justifyContent: 'center', alignItems: 'center' },
-  accionLabel:   { flex: 1, fontSize: 14, color: COLORES.foreground },
-
-  btnCerrarSesion:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 16, paddingVertical: 14, borderWidth: 1.5, borderColor: '#FFCDD2', gap: 8, marginBottom: 20 },
-  btnCerrarSesionTexto: { color: COLORES.error, fontWeight: '700', fontSize: 15 },
+  btnCerrar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORES.error, borderRadius: 16, paddingVertical: 15, marginTop: 8 },
+  btnCerrarTexto: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

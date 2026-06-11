@@ -9,16 +9,16 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CONFIG from '../config';
 import COLORES from '../constantes/colores';
-
+import { useAlerta } from '../componentes/AlertaPersonalizada';
 // ─── Intento de registro en el servidor ────────────────────────────────────
-async function intentarRegistroServidor(email, password) {
+async function intentarRegistroServidor(email, password, nombre, telefono) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
     const resp = await fetch(`${CONFIG.API_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, nombre }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -80,7 +80,7 @@ export default function RegistroScreen({ navigation, setToken }) {
   const [errores,   setErrores]   = useState({});
   const [verPass,   setVerPass]   = useState(false);
   const [verConf,   setVerConf]   = useState(false);
-
+const { mostrar, AlertaPersonalizada } = useAlerta();
   const clearError = useCallback((label) => {
     setErrores((prev) => {
       if (!prev[label]) return prev;
@@ -111,49 +111,64 @@ export default function RegistroScreen({ navigation, setToken }) {
     const emailNorm = email.toLowerCase().trim();
 
     try {
-      const resp = await intentarRegistroServidor(emailNorm, password);
-
+const resp = await intentarRegistroServidor(email, password, nombre, telefono);
       let token;
 
       if (resp && resp.ok) {
         // Servidor disponible
         const datos = await resp.json();
         token = datos.token;
-      } else if (resp && !resp.ok) {
-        let msg = 'Error al registrar';
-        try { const d = await resp.json(); msg = d.error || msg; } catch {}
-        setErrores({ general: msg });
-        return;
-      } else {
-        // Sin servidor → registro local
-        const local = await registrarLocal(emailNorm, password, nombre);
-        if (!local.ok) { setErrores({ general: local.error || 'Error local' }); return; }
-        token = local.token;
-      }
+     } else if (resp && !resp.ok) {
+  let msg = 'Error al registrar';
+  try { const d = await resp.json(); msg = d.error || msg; } catch {}
+
+  if (resp.status === 409) {
+    mostrar({
+      tipo: 'confirmacion',
+      titulo: 'Correo ya registrado',
+      mensaje: 'Este correo ya tiene una cuenta. ¿Deseas iniciar sesión?',
+      icono: 'person-circle-outline',
+      botonCancelar: 'Cancelar',
+      botonConfirmar: 'Iniciar sesión',
+onConfirmar: () => navigation.navigate('Home'),
+    });
+    return;
+  }
+
+  setErrores({ general: msg });
+  return;
+} else {
+  // Sin servidor → registro local
+  const local = await registrarLocal(emailNorm, password, nombre);
+  if (!local.ok) { setErrores({ general: local.error || 'Error local' }); return; }
+  token = local.token;
+}
+
 
       await AsyncStorage.setItem('token', token);
       await AsyncStorage.setItem('nombre', nombre);
       await AsyncStorage.setItem('email', emailNorm);
+      await AsyncStorage.setItem('telefono', telefono);
       await AsyncStorage.setItem('cedula', cedula);
       await AsyncStorage.setItem('perfil_especialista', JSON.stringify({
         nombre, cedula, email: emailNorm, telefono,
       }));
 
-     setToken(token);
-      Alert.alert(
-        'Athenea le saluda',
-        `Hola ${nombre}, tu cuenta fue creada exitosamente.`,
-        [{
-          text: 'Comenzar',
-          onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Home' }] }),
-        }]
-      );
-   } catch (e) {
-      console.log('ERROR REGISTRO:', e.message, e);
-      setErrores({ general: 'Error inesperado. Intenta de nuevo.' });
-    } finally {
-      setCargando(false);
-    }
+    setToken(token);
+mostrar({
+  tipo: 'exito',
+  titulo: '¡Bienvenido a Athenea!',
+  mensaje: `Hola ${nombre}, tu cuenta fue creada exitosamente.`,
+  boton: 'Comenzar',
+  onConfirmar: () => {},
+  icono: 'eye-outline'
+});
+} catch (e) {
+  console.log('ERROR REGISTRO:', e.message, e);
+  setErrores({ general: 'Error inesperado. Intenta de nuevo.' });
+} finally {
+  setCargando(false);
+}
   }
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -230,6 +245,7 @@ export default function RegistroScreen({ navigation, setToken }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <AlertaPersonalizada />
     </KeyboardAvoidingView>
   );
 }

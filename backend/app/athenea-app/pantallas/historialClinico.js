@@ -10,6 +10,7 @@ import { obtenerTodasLasHistorias, sincronizarPendientes, borrarHistoriaPorId } 
 import { sincronizarAhora } from '../servicios/syncEngine';
 import COLORES from '../constantes/colores';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import HeaderConDrawer from '../componentes/HeaderConDrawer';
 const OD_COLOR = '#1565C0';
 const OI_COLOR = '#C62828';
 
@@ -74,7 +75,7 @@ function SeccionModal({ titulo, icono, children }) {
   );
 }
 
-export default function HistorialClinico({ navigation, route }) {
+export default function HistorialClinico({ navigation, route, setToken }) {
   const [historias,     setHistorias]     = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [refreshing,    setRefreshing]    = useState(false);
@@ -362,50 +363,42 @@ export default function HistorialClinico({ navigation, route }) {
     <View style={styles.raiz}>
       <StatusBar barStyle="light-content" />
 
-      <LinearGradient
-        colors={[COLORES.gradienteInicio, COLORES.gradienteMedio]}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: paddingTop + 8 }]}
-      >
-        <View style={styles.headerFila}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitulo}>
-              {cedulaFiltro ? `Historial · ${cedulaFiltro}` : 'Historial Clínico'}
-            </Text>
-            <Text style={styles.headerSub}>{historias.length} registro{historias.length !== 1 ? 's' : ''}</Text>
-          </View>
-          {pendientes > 0 && (
-            <TouchableOpacity style={styles.syncBtn} onPress={handleSync} disabled={sincronizando}>
-              {sincronizando
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Ionicons name="cloud-upload-outline" size={22} color="#fff" />}
+     <HeaderConDrawer
+        titulo={cedulaFiltro ? `Historial · ${cedulaFiltro}` : 'Historial Clínico'}
+        subtitulo={`${historias.length} registro${historias.length !== 1 ? 's' : ''}`}
+        navigation={navigation}
+        setToken={setToken}
+        pantallaActual="HistorialClinico"
+      />
+
+      {/* Buscador */}
+      {!cedulaFiltro && (
+        <View style={styles.buscadorCaja}>
+          <Ionicons name="search-outline" size={16} color={COLORES.mutedForeground} style={{ marginLeft: 12 }} />
+          <TextInput
+            style={styles.buscador}
+            placeholder="Buscar por nombre o cédula..."
+            placeholderTextColor={COLORES.mutedForeground}
+            value={busqueda}
+            onChangeText={setBusqueda}
+            returnKeyType="search"
+          />
+          {busqueda.length > 0 && (
+            <TouchableOpacity onPress={() => setBusqueda('')} style={{ paddingRight: 12 }}>
+              <Ionicons name="close-circle" size={16} color={COLORES.mutedForeground} />
             </TouchableOpacity>
           )}
         </View>
+      )}
 
-        {/* Buscador */}
-        {!cedulaFiltro && (
-          <View style={styles.buscadorCaja}>
-            <Ionicons name="search-outline" size={16} color={COLORES.mutedForeground} style={{ marginLeft: 12 }} />
-            <TextInput
-              style={styles.buscador}
-              placeholder="Buscar por nombre o cédula..."
-              placeholderTextColor={COLORES.mutedForeground}
-              value={busqueda}
-              onChangeText={setBusqueda}
-              returnKeyType="search"
-            />
-            {busqueda.length > 0 && (
-              <TouchableOpacity onPress={() => setBusqueda('')} style={{ paddingRight: 12 }}>
-                <Ionicons name="close-circle" size={16} color={COLORES.mutedForeground} />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </LinearGradient>
+      {/* Botón sync si hay pendientes */}
+      {pendientes > 0 && (
+        <TouchableOpacity style={styles.syncBtn} onPress={handleSync} disabled={sincronizando}>
+          {sincronizando
+            ? <ActivityIndicator color={COLORES.primario} size="small" />
+            : <Ionicons name="cloud-upload-outline" size={22} color={COLORES.primario} />}
+        </TouchableOpacity>
+      )}
 
       {/* Banner pendientes */}
       {pendientes > 0 && (

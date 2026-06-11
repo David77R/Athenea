@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   FlatList, ActivityIndicator, Alert, KeyboardAvoidingView,
-  Platform, Modal, ScrollView, StatusBar
+  Platform, Modal, ScrollView
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,27 +10,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buscarHistoriasLocales } from '../baseDatosLite/basedatoslt';
 import CONFIG from '../config';
 import COLORES from '../constantes/colores';
+import HeaderConDrawer from '../componentes/HeaderConDrawer';
 
-export default function BuscarPacienteScreen({ navigation }) {
-  const [cedula,           setCedula]           = useState('');
-  const [buscando,         setBuscando]         = useState(false);
-  const [resultados,       setResultados]       = useState([]);
-  const [buscado,          setBuscado]          = useState(false);
-  const [fuenteLocal,      setFuenteLocal]      = useState(false);
+export default function BuscarPacienteScreen({ navigation, setToken }) {
+  const [cedula,       setCedula]       = useState('');
+  const [buscando,     setBuscando]     = useState(false);
+  const [resultados,   setResultados]   = useState([]);
+  const [buscado,      setBuscado]      = useState(false);
+  const [fuenteLocal,  setFuenteLocal]  = useState(false);
 
   // Modal registro
-  const [modalVisible,      setModalVisible]      = useState(false);
-  const [guardando,         setGuardando]         = useState(false);
-  const [formNombre,        setFormNombre]        = useState('');
-  const [formApellido,      setFormApellido]      = useState('');
-  const [formEdad,          setFormEdad]          = useState('');
-  const [formTelefono,      setFormTelefono]      = useState('');
-  const [formOcupacion,     setFormOcupacion]     = useState('');
+  const [modalVisible,  setModalVisible]  = useState(false);
+  const [guardando,     setGuardando]     = useState(false);
+  const [formNombre,    setFormNombre]    = useState('');
+  const [formApellido,  setFormApellido]  = useState('');
+  const [formEdad,      setFormEdad]      = useState('');
+  const [formTelefono,  setFormTelefono]  = useState('');
+  const [formOcupacion, setFormOcupacion] = useState('');
 
-  // ─── Buscar en servidor ──────────────────────────────────────────────────
+  // ─── Buscar ──────────────────────────────────────────────────────────────
   async function buscar() {
     if (!cedula.trim()) {
-      Alert.alert('Campo requerido', 'Ingresa una cédula para buscar.');
+      Alert.alert('Campo requerido', 'Ingresa una cédula o nombre para buscar.');
       return;
     }
     setBuscando(true);
@@ -38,9 +39,16 @@ export default function BuscarPacienteScreen({ navigation }) {
     setResultados([]);
     setFuenteLocal(false);
 
+    const termino = cedula.trim();
+    const esNumero = /^\d+$/.test(termino);
+
     try {
       const token = await AsyncStorage.getItem('token');
-      const resp  = await fetch(`${CONFIG.CLINICAL_URL}/historias?cedula=${cedula.trim()}`, {
+      const url = esNumero
+        ? `${CONFIG.CLINICAL_URL}/historias?cedula=${termino}`
+        : `${CONFIG.CLINICAL_URL}/historias?nombre=${termino}`;
+
+      const resp = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -49,6 +57,7 @@ export default function BuscarPacienteScreen({ navigation }) {
         const lista = Array.isArray(datos) ? datos : datos ? [datos] : [];
         setResultados(lista);
         setBuscado(true);
+        setBuscando(false);
         return;
       }
     } catch {
@@ -57,17 +66,17 @@ export default function BuscarPacienteScreen({ navigation }) {
 
     // Fallback local
     try {
-      const locales = await buscarHistoriasLocales(cedula.trim());
+      const locales = await buscarHistoriasLocales(termino);
       const parseadas = locales.map(item => {
         try {
           const d = JSON.parse(item.datos);
           return {
-            _id:            item.id,
-            paciente:       d.paciente || {},
+            _id:             item.id,
+            paciente:        d.paciente || {},
             motivo_consulta: d.anamnesis?.motivo || '',
-            diagnostico:    d.diagnostico?.diagPrincipal || '',
-            _local:         true,
-            sincronizado:   item.sincronizado,
+            diagnostico:     d.diagnostico?.diagPrincipal || '',
+            _local:          true,
+            sincronizado:    item.sincronizado,
           };
         } catch { return null; }
       }).filter(Boolean);
@@ -94,7 +103,7 @@ export default function BuscarPacienteScreen({ navigation }) {
     setModalVisible(true);
   }
 
-  // ─── Registrar paciente nuevo ────────────────────────────────────────────
+  // ─── Registrar paciente nuevo ─────────────────────────────────────────────
   async function registrarPaciente() {
     if (!formNombre.trim() || !formApellido.trim()) {
       Alert.alert('Campos requeridos', 'El nombre y apellido son obligatorios.');
@@ -111,8 +120,8 @@ export default function BuscarPacienteScreen({ navigation }) {
           nombre:    formNombre.trim(),
           apellido:  formApellido.trim(),
           edad:      formEdad ? Number(formEdad) : undefined,
-          telefono:  formTelefono.trim() || undefined,
-          ocupacion: formOcupacion.trim() || undefined,
+          telefono:  formTelefono.trim()   || undefined,
+          ocupacion: formOcupacion.trim()  || undefined,
         }),
       });
 
@@ -151,13 +160,14 @@ export default function BuscarPacienteScreen({ navigation }) {
 
   function formatFecha(f) {
     if (!f) return '';
-    try { return new Date(f).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }); }
-    catch { return f; }
+    try {
+      return new Date(f).toLocaleDateString('es-ES', {
+        day: '2-digit', month: 'short', year: 'numeric',
+      });
+    } catch { return f; }
   }
 
-  const paddingTop = Platform.OS === 'android' ? 48 : 60;
-
-  // ─── Card de resultado ───────────────────────────────────────────────────
+  // ─── Card de resultado ────────────────────────────────────────────────────
   function renderCard({ item }) {
     const nombre = item.paciente?.nombre || 'Paciente';
     return (
@@ -176,9 +186,11 @@ export default function BuscarPacienteScreen({ navigation }) {
               <Text style={styles.badgeLocalTexto}>LOCAL</Text>
             </View>
           )}
-          {item.fecha_consulta || item.createdAt ? (
-            <Text style={styles.cardFecha}>{formatFecha(item.fecha_consulta || item.createdAt)}</Text>
-          ) : null}
+          {(item.fecha_consulta || item.createdAt) && (
+            <Text style={styles.cardFecha}>
+              {formatFecha(item.fecha_consulta || item.createdAt)}
+            </Text>
+          )}
         </View>
 
         <View style={styles.divider} />
@@ -196,14 +208,26 @@ export default function BuscarPacienteScreen({ navigation }) {
         <View style={styles.cardBotones}>
           <TouchableOpacity
             style={styles.btnVer}
-            onPress={() => navigation.navigate('HistorialClinico', { cedula: item.paciente?.cedula || cedula })}
+            onPress={() =>
+              navigation.navigate('HistorialClinico', {
+                cedula: item.paciente?.cedula || cedula,
+              })
+            }
           >
             <Ionicons name="document-text-outline" size={14} color={COLORES.primario} />
             <Text style={styles.btnVerTexto}>Ver historial</Text>
           </TouchableOpacity>
+
+          {/* ── FIX: pasa pacientePreseleccionado a Grabacion ── */}
           <TouchableOpacity
             style={styles.btnNueva}
-            onPress={() => navigation.navigate('Grabacion')}
+            onPress={() => navigation.navigate('Grabacion', {
+              pacientePreseleccionado: {
+                nombre:   item.paciente?.nombre   || '',
+                cedula:   item.paciente?.cedula   || cedula,
+                telefono: item.paciente?.telefono || '',
+              },
+            })}
           >
             <Ionicons name="mic-outline" size={14} color="#fff" />
             <Text style={styles.btnNuevaTexto}>Nueva consulta</Text>
@@ -213,35 +237,35 @@ export default function BuscarPacienteScreen({ navigation }) {
     );
   }
 
+  // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <StatusBar barStyle="light-content" />
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: COLORES.fondo }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <HeaderConDrawer
+        navigation={navigation}
+        titulo="Buscar Paciente"
+        mostrarBack={true}
+      />
 
-      {/* Header */}
-      <LinearGradient
-        colors={[COLORES.gradienteInicio, COLORES.gradienteMedio]}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: paddingTop + 8 }]}
-      >
-        <View style={styles.headerFila}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitulo}>Buscar Paciente</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        {/* Buscador */}
+      {/* Barra de búsqueda */}
+      <View style={styles.buscadorContenedor}>
         <View style={styles.buscadorFila}>
           <View style={styles.buscadorCaja}>
-            <Ionicons name="search-outline" size={16} color={COLORES.mutedForeground} style={{ marginLeft: 12 }} />
+            <Ionicons
+              name="search-outline"
+              size={16}
+              color={COLORES.mutedForeground}
+              style={{ marginLeft: 12 }}
+            />
             <TextInput
               style={styles.buscadorInput}
-              placeholder="Número de cédula..."
+              placeholder="Nombre o número de cédula..."
               placeholderTextColor={COLORES.mutedForeground}
               value={cedula}
               onChangeText={setCedula}
-              keyboardType="numeric"
+              keyboardType="default"
               onSubmitEditing={buscar}
               returnKeyType="search"
             />
@@ -261,27 +285,30 @@ export default function BuscarPacienteScreen({ navigation }) {
               : <Text style={styles.btnBuscarTexto}>Buscar</Text>}
           </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
 
-      {/* Banner fuente local */}
+      {/* Banner sin conexión */}
       {fuenteLocal && (
         <View style={styles.bannerLocal}>
           <Ionicons name="wifi-outline" size={14} color="#F57F17" />
-          <Text style={styles.bannerLocalTexto}>Sin conexión — mostrando resultados locales</Text>
+          <Text style={styles.bannerLocalTexto}>
+            Sin conexión — mostrando resultados locales
+          </Text>
         </View>
       )}
 
-      {/* Contador */}
+      {/* Contador de resultados */}
       {buscado && !buscando && (
         <View style={styles.contadorFila}>
           <Text style={styles.contadorTexto}>
             {resultados.length > 0
               ? `${resultados.length} historia${resultados.length > 1 ? 's' : ''} encontrada${resultados.length > 1 ? 's' : ''}`
-              : `Sin resultados para cédula ${cedula}`}
+              : `Sin resultados para "${cedula}"`}
           </Text>
         </View>
       )}
 
+      {/* Lista de resultados */}
       <FlatList
         data={resultados}
         keyExtractor={(item) => item._id || item.id || String(Math.random())}
@@ -293,7 +320,9 @@ export default function BuscarPacienteScreen({ navigation }) {
             <View style={styles.vacioCont}>
               <Ionicons name="search-outline" size={60} color={COLORES.borde} />
               <Text style={styles.vacioTitulo}>No se encontraron historias</Text>
-              <Text style={styles.vacioSub}>No hay historias clínicas para la cédula {cedula}</Text>
+              <Text style={styles.vacioSub}>
+                No hay historias clínicas para la cédula {cedula}
+              </Text>
               <TouchableOpacity style={styles.btnRegistrar} onPress={abrirModal}>
                 <Ionicons name="person-add-outline" size={16} color="#fff" />
                 <Text style={styles.btnRegistrarTexto}>Registrar paciente nuevo</Text>
@@ -303,22 +332,35 @@ export default function BuscarPacienteScreen({ navigation }) {
             <View style={styles.vacioCont}>
               <Ionicons name="people-outline" size={60} color={COLORES.borde} />
               <Text style={styles.vacioTitulo}>Busca un paciente</Text>
-              <Text style={styles.vacioSub}>Ingresa el número de cédula para encontrar sus historias clínicas</Text>
+              <Text style={styles.vacioSub}>
+                Ingresa el número de cédula o nombre para encontrar sus historias clínicas
+              </Text>
             </View>
           ) : null
         }
       />
 
       {/* Modal registro nuevo paciente */}
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setModalVisible(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCaja}>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               <View style={styles.modalBarra} />
+
               <View style={styles.modalHeaderFila}>
                 <Text style={styles.modalTitulo}>Registrar paciente</Text>
-                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.modalCerrarBtn}>
+                <TouchableOpacity
+                  onPress={() => setModalVisible(false)}
+                  style={styles.modalCerrarBtn}
+                >
                   <Ionicons name="close" size={20} color={COLORES.mutedForeground} />
                 </TouchableOpacity>
               </View>
@@ -330,10 +372,10 @@ export default function BuscarPacienteScreen({ navigation }) {
               </View>
 
               {[
-                { label: 'NOMBRE *',   value: formNombre,    set: setFormNombre,    ph: 'Nombre(s)',      cap: 'words' },
-                { label: 'APELLIDO *', value: formApellido,  set: setFormApellido,  ph: 'Apellido(s)',    cap: 'words' },
-                { label: 'TELÉFONO',   value: formTelefono,  set: setFormTelefono,  ph: '04XX-XXXXXXX',  kb: 'phone-pad' },
-                { label: 'OCUPACIÓN',  value: formOcupacion, set: setFormOcupacion, ph: 'Profesión',      cap: 'words' },
+                { label: 'NOMBRE *',   value: formNombre,    set: setFormNombre,    ph: 'Nombre(s)',     cap: 'words' },
+                { label: 'APELLIDO *', value: formApellido,  set: setFormApellido,  ph: 'Apellido(s)',   cap: 'words' },
+                { label: 'TELÉFONO',   value: formTelefono,  set: setFormTelefono,  ph: '04XX-XXXXXXX', kb:  'phone-pad' },
+                { label: 'OCUPACIÓN',  value: formOcupacion, set: setFormOcupacion, ph: 'Profesión',     cap: 'words' },
               ].map(({ label, value, set, ph, cap, kb }) => (
                 <View key={label} style={{ marginBottom: 12 }}>
                   <Text style={styles.modalLabel}>{label}</Text>
@@ -344,6 +386,7 @@ export default function BuscarPacienteScreen({ navigation }) {
                     value={value}
                     onChangeText={set}
                     autoCapitalize={cap || 'none'}
+                    autoCorrect={false}
                     keyboardType={kb || 'default'}
                   />
                 </View>
@@ -368,7 +411,8 @@ export default function BuscarPacienteScreen({ navigation }) {
               >
                 <LinearGradient
                   colors={[COLORES.primario, COLORES.gradienteFin]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
                   style={styles.modalBtnGrad}
                 >
                   {guardando
@@ -377,10 +421,12 @@ export default function BuscarPacienteScreen({ navigation }) {
                 </LinearGradient>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.modalBtnCancelar} onPress={() => setModalVisible(false)}>
+              <TouchableOpacity
+                style={styles.modalBtnCancelar}
+                onPress={() => setModalVisible(false)}
+              >
                 <Text style={styles.modalBtnCancelarTexto}>Cancelar</Text>
               </TouchableOpacity>
-
             </ScrollView>
           </View>
         </View>
@@ -390,18 +436,32 @@ export default function BuscarPacienteScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  header:      { paddingHorizontal: 16, paddingBottom: 16 },
-  headerFila:  { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-  backBtn:     { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
-  headerTitulo: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: '#fff' },
-
-  buscadorFila: { flexDirection: 'row', gap: 10 },
-  buscadorCaja: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14 },
-  buscadorInput: { flex: 1, paddingHorizontal: 10, paddingVertical: 13, fontSize: 15, color: COLORES.foreground },
-  btnBuscar:    { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 14, paddingHorizontal: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)' },
+  buscadorContenedor: {
+    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1, borderBottomColor: COLORES.borde,
+  },
+  buscadorFila:  { flexDirection: 'row', gap: 10 },
+  buscadorCaja:  {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORES.muted, borderRadius: 14,
+    borderWidth: 1.5, borderColor: COLORES.borde,
+  },
+  buscadorInput: {
+    flex: 1, paddingHorizontal: 10, paddingVertical: 13,
+    fontSize: 15, color: COLORES.foreground,
+  },
+  btnBuscar: {
+    backgroundColor: COLORES.primario, borderRadius: 14,
+    paddingHorizontal: 18, justifyContent: 'center', alignItems: 'center',
+  },
   btnBuscarTexto: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  bannerLocal:     { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF9C4', paddingHorizontal: 16, paddingVertical: 10, gap: 8, borderBottomWidth: 1, borderBottomColor: '#F9A825' },
+  bannerLocal: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FFF9C4', paddingHorizontal: 16, paddingVertical: 10,
+    gap: 8, borderBottomWidth: 1, borderBottomColor: '#F9A825',
+  },
   bannerLocalTexto: { color: '#F57F17', fontSize: 13 },
 
   contadorFila:  { paddingHorizontal: 16, paddingVertical: 10 },
@@ -409,46 +469,49 @@ const styles = StyleSheet.create({
 
   lista: { padding: 14, paddingBottom: 40, flexGrow: 1 },
 
-  card:       { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12, elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  cardAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORES.secundario, justifyContent: 'center', alignItems: 'center' },
-  cardAvatarTexto: { fontSize: 18, fontWeight: '700', color: COLORES.primario },
-  cardNombre: { fontSize: 15, fontWeight: '700', color: COLORES.oscuro },
-  cardCedula: { fontSize: 12, color: COLORES.mutedForeground, marginTop: 2 },
-  cardFecha:  { fontSize: 11, color: COLORES.mutedForeground },
-  divider:    { height: 1, backgroundColor: COLORES.muted, marginBottom: 10 },
-  cardMotivo: { fontSize: 13, color: COLORES.mutedForeground, lineHeight: 20, marginBottom: 10 },
-  cardBadgeDx: { backgroundColor: COLORES.secundario, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 12 },
+  card: {
+    backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12,
+    elevation: 3, shadowColor: '#000', shadowOpacity: 0.06,
+    shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
+  },
+  cardHeader:       { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  cardAvatar:       { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORES.secundario, justifyContent: 'center', alignItems: 'center' },
+  cardAvatarTexto:  { fontSize: 18, fontWeight: '700', color: COLORES.primario },
+  cardNombre:       { fontSize: 15, fontWeight: '700', color: COLORES.oscuro },
+  cardCedula:       { fontSize: 12, color: COLORES.mutedForeground, marginTop: 2 },
+  cardFecha:        { fontSize: 11, color: COLORES.mutedForeground },
+  divider:          { height: 1, backgroundColor: COLORES.muted, marginBottom: 10 },
+  cardMotivo:       { fontSize: 13, color: COLORES.mutedForeground, lineHeight: 20, marginBottom: 10 },
+  cardBadgeDx:      { backgroundColor: COLORES.secundario, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 12 },
   cardBadgeDxTexto: { fontSize: 12, color: COLORES.primario, fontWeight: '600' },
-  cardBotones: { flexDirection: 'row', gap: 8 },
-  btnVer:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderColor: COLORES.primario, borderRadius: 12, paddingVertical: 10 },
-  btnVerTexto: { color: COLORES.primario, fontWeight: '600', fontSize: 13 },
-  btnNueva:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORES.primario, borderRadius: 12, paddingVertical: 10 },
-  btnNuevaTexto: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  cardBotones:      { flexDirection: 'row', gap: 8 },
+  btnVer:           { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderColor: COLORES.primario, borderRadius: 12, paddingVertical: 10 },
+  btnVerTexto:      { color: COLORES.primario, fontWeight: '600', fontSize: 13 },
+  btnNueva:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORES.primario, borderRadius: 12, paddingVertical: 10 },
+  btnNuevaTexto:    { color: '#fff', fontWeight: '600', fontSize: 13 },
+  badgeLocal:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF8F00', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3, gap: 3 },
+  badgeLocalTexto:  { color: '#fff', fontSize: 9, fontWeight: '700' },
 
-  badgeLocal:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF8F00', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3, gap: 3 },
-  badgeLocalTexto: { color: '#fff', fontSize: 9, fontWeight: '700' },
-
-  vacioCont:   { flex: 1, alignItems: 'center', paddingTop: 60, paddingHorizontal: 30 },
-  vacioTitulo: { fontSize: 17, fontWeight: '700', color: COLORES.oscuro, marginTop: 16, marginBottom: 6 },
-  vacioSub:    { fontSize: 13, color: COLORES.mutedForeground, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  btnRegistrar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.primario, borderRadius: 14, paddingHorizontal: 24, paddingVertical: 14, gap: 8 },
+  vacioCont:         { flex: 1, alignItems: 'center', paddingTop: 60, paddingHorizontal: 30 },
+  vacioTitulo:       { fontSize: 17, fontWeight: '700', color: COLORES.oscuro, marginTop: 16, marginBottom: 6 },
+  vacioSub:          { fontSize: 13, color: COLORES.mutedForeground, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  btnRegistrar:      { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.primario, borderRadius: 14, paddingHorizontal: 24, paddingVertical: 14, gap: 8 },
   btnRegistrarTexto: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(13,59,68,0.7)', justifyContent: 'flex-end' },
-  modalCaja:    { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40, maxHeight: '90%' },
-  modalBarra:   { width: 50, height: 5, backgroundColor: COLORES.borde, borderRadius: 3, alignSelf: 'center', marginBottom: 20 },
-  modalHeaderFila: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitulo:  { fontSize: 18, fontWeight: '700', color: COLORES.oscuro },
-  modalCerrarBtn: { width: 32, height: 32, backgroundColor: COLORES.muted, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  modalCedulaBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.secundario, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 20, gap: 8 },
-  modalCedulaLabel: { fontSize: 12, color: COLORES.mutedForeground, fontWeight: '600' },
-  modalCedulaValor: { fontSize: 16, fontWeight: '700', color: COLORES.primario },
-  modalLabel:   { fontSize: 11, color: COLORES.mutedForeground, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  modalInput:   { borderWidth: 1.5, borderColor: COLORES.borde, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: COLORES.foreground, backgroundColor: COLORES.muted },
-  modalBtnGuardar:  { borderRadius: 14, overflow: 'hidden', marginTop: 8, marginBottom: 10 },
-  modalBtnGrad:     { paddingVertical: 15, alignItems: 'center' },
-  modalBtnTexto:    { color: '#fff', fontWeight: '700', fontSize: 16 },
-  modalBtnCancelar: { borderWidth: 1.5, borderColor: COLORES.borde, borderRadius: 14, paddingVertical: 13, alignItems: 'center' },
-  modalBtnCancelarTexto: { color: COLORES.mutedForeground, fontWeight: '600', fontSize: 15 },
+  modalOverlay:         { flex: 1, backgroundColor: 'rgba(13,59,68,0.7)', justifyContent: 'flex-end' },
+  modalCaja:            { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40, maxHeight: '90%' },
+  modalBarra:           { width: 50, height: 5, backgroundColor: COLORES.borde, borderRadius: 3, alignSelf: 'center', marginBottom: 20 },
+  modalHeaderFila:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitulo:          { fontSize: 18, fontWeight: '700', color: COLORES.oscuro },
+  modalCerrarBtn:       { width: 32, height: 32, backgroundColor: COLORES.muted, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  modalCedulaBadge:     { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.secundario, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 20, gap: 8 },
+  modalCedulaLabel:     { fontSize: 12, color: COLORES.mutedForeground, fontWeight: '600' },
+  modalCedulaValor:     { fontSize: 16, fontWeight: '700', color: COLORES.primario },
+  modalLabel:           { fontSize: 11, color: COLORES.mutedForeground, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  modalInput:           { borderWidth: 1.5, borderColor: COLORES.borde, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: COLORES.foreground, backgroundColor: COLORES.muted },
+  modalBtnGuardar:      { borderRadius: 14, overflow: 'hidden', marginTop: 8, marginBottom: 10 },
+  modalBtnGrad:         { paddingVertical: 15, alignItems: 'center' },
+  modalBtnTexto:        { color: '#fff', fontWeight: '700', fontSize: 16 },
+  modalBtnCancelar:     { borderWidth: 1.5, borderColor: COLORES.borde, borderRadius: 14, paddingVertical: 13, alignItems: 'center' },
+  modalBtnCancelarTexto:{ color: COLORES.mutedForeground, fontWeight: '600', fontSize: 15 },
 });

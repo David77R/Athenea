@@ -32,9 +32,9 @@ async function intentarLoginServidor(email, password) {
 // ─── Login offline con cuentas locales ─────────────────────────────────────
 async function loginLocal(email, password) {
   try {
-    const raw = await AsyncStorage.getItem('cuentas_locales');
+    const raw     = await AsyncStorage.getItem('cuentas_locales');
     const cuentas = raw ? JSON.parse(raw) : {};
-    const cuenta = cuentas[email];
+    const cuenta  = cuentas[email];
     if (!cuenta) return null;
     if (cuenta.password !== password) return null;
     const token = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -45,12 +45,12 @@ async function loginLocal(email, password) {
 }
 
 export default function LoginScreen({ navigation, setToken }) {
-  const [credencial, setCredencial] = useState('');
-  const [password, setPassword]   = useState('');
-  const [cargando, setCargando]   = useState(false);
-  const [errores, setErrores]     = useState({});
-  const [verPass, setVerPass]     = useState(false);
-  const [modoOffline, setModoOffline] = useState('');
+  const [credencial,   setCredencial]   = useState('');
+  const [password,     setPassword]     = useState('');
+  const [cargando,     setCargando]     = useState(false);
+  const [errores,      setErrores]      = useState({});
+  const [verPass,      setVerPass]      = useState(false);
+  const [modoOffline,  setModoOffline]  = useState('');
 
   function validar() {
     const e = {};
@@ -73,11 +73,15 @@ export default function LoginScreen({ navigation, setToken }) {
       // ── Servidor disponible y responde OK ──
       if (resp && resp.ok) {
         const datos = await resp.json();
-        await AsyncStorage.setItem('token', datos.token);
-        await AsyncStorage.setItem('email', emailNorm);
-        if (datos.nombre) await AsyncStorage.setItem('nombre', datos.nombre);
-        setToken(datos.token);
-        navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+        console.log('datos del servidor:', JSON.stringify(datos));
+        await AsyncStorage.multiSet([
+          ['token',    datos.token],
+          ['email',    emailNorm],
+          ['nombre',   datos.user?.nombre   || ''],
+          ['rol',      datos.user?.rol      || 'optometrist'],
+          ['telefono', datos.user?.telefono || ''],
+        ]);
+        setToken(datos.token); // ← el navigator condicional redirige automáticamente
         return;
       }
 
@@ -92,13 +96,13 @@ export default function LoginScreen({ navigation, setToken }) {
       // ── Sin servidor — intentar cuenta local ──
       const local = await loginLocal(emailNorm, password);
       if (local) {
-        await AsyncStorage.setItem('token', local.token);
-        await AsyncStorage.setItem('email', emailNorm);
-        await AsyncStorage.setItem('nombre', local.nombre);
-        setToken(local.token);
-        setToken(local.token);
+        await AsyncStorage.multiSet([
+          ['token',  local.token],
+          ['email',  emailNorm],
+          ['nombre', local.nombre],
+        ]);
         setModoOffline('Modo offline — datos locales');
-        navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+        setToken(local.token); // ← el navigator condicional redirige automáticamente
         return;
       }
 
@@ -228,7 +232,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  logoArea:   { alignItems: 'center', marginBottom: 40 },
+  logoArea:    { alignItems: 'center', marginBottom: 40 },
   logoExterno: {
     width: 90, height: 90, borderRadius: 45,
     backgroundColor: 'rgba(255,255,255,0.12)',
@@ -252,20 +256,20 @@ const styles = StyleSheet.create({
   },
   tarjetaTitulo: { fontSize: 22, fontWeight: '700', color: COLORES.foreground, marginBottom: 24 },
 
-  campo:    { marginBottom: 16 },
+  campo:     { marginBottom: 16 },
   inputFila: {
     flexDirection: 'row', alignItems: 'center',
     borderWidth: 1.5, borderColor: COLORES.borde,
     borderRadius: 14, backgroundColor: COLORES.muted,
   },
-  inputIcono: { paddingLeft: 14 },
+  inputIcono:  { paddingLeft: 14 },
   input: {
     flex: 1, paddingHorizontal: 12, paddingVertical: 14,
     fontSize: 15, color: COLORES.foreground,
   },
-  inputError:  { borderColor: COLORES.error },
-  ojito:       { paddingHorizontal: 14 },
-  textoError:  { color: COLORES.error, fontSize: 12, marginTop: 4, marginLeft: 4 },
+  inputError:   { borderColor: COLORES.error },
+  ojito:        { paddingHorizontal: 14 },
+  textoError:   { color: COLORES.error, fontSize: 12, marginTop: 4, marginLeft: 4 },
   errorGeneral: { color: COLORES.error, fontSize: 13, textAlign: 'center', marginBottom: 12, lineHeight: 18 },
 
   offlineBanner: {
@@ -275,10 +279,10 @@ const styles = StyleSheet.create({
   },
   offlineTexto: { fontSize: 12, color: COLORES.advertencia, flex: 1 },
 
-  boton:         { borderRadius: 14, overflow: 'hidden', marginTop: 8 },
+  boton:            { borderRadius: 14, overflow: 'hidden', marginTop: 8 },
   botonDesactivado: { opacity: 0.7 },
-  botonGradiente: { paddingVertical: 16, alignItems: 'center' },
-  botonTexto:    { color: '#fff', fontSize: 16, fontWeight: '700' },
+  botonGradiente:   { paddingVertical: 16, alignItems: 'center' },
+  botonTexto:       { color: '#fff', fontSize: 16, fontWeight: '700' },
 
   linkFila:   { alignItems: 'center', marginTop: 20 },
   linkTexto:  { fontSize: 14, color: COLORES.mutedForeground },

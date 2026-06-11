@@ -1,97 +1,132 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Animated, Modal, TextInput, FlatList, ActivityIndicator,
-  Platform, StatusBar
+  Modal, Platform, StatusBar, Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DrawerMenu from '../componentes/drawerMenu';
-import { obtenerTodasLasHistorias, contarHistoriasPendientes } from '../baseDatosLite/basedatoslt';
-import CONFIG from '../config';
+import { obtenerTodasLasHistorias, obtenerHistoriasPendientes } from '../baseDatosLite/basedatoslt';
 import COLORES from '../constantes/colores';
+const { width } = Dimensions.get('window');
+
+// ── Días de la semana empezando en Lunes ──────────────────────────────────
+const DIAS_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+
+function getDiaIndex(fecha) {
+  // getDay() devuelve 0=Dom,1=Lun...6=Sáb → convertimos a 0=Lun..6=Dom
+  const d = fecha.getDay();
+  return d === 0 ? 6 : d - 1;
+}
+
+function actividadSemana(historias) {
+  // Devuelve array [L,M,X,J,V,S,D] con conteo de historias de esta semana
+  const hoy        = new Date();
+  const diaHoyIdx  = getDiaIndex(hoy);                     // 0=Lun..6=Dom
+  const inicioSem  = new Date(hoy);
+  inicioSem.setDate(hoy.getDate() - diaHoyIdx);            // Lunes de esta semana
+  inicioSem.setHours(0, 0, 0, 0);
+
+  const dias = [0, 0, 0, 0, 0, 0, 0];
+  historias.forEach(h => {
+    if (!h.creado_en) return;
+    const f = new Date(h.creado_en);
+    if (f >= inicioSem && f <= hoy) {
+      dias[getDiaIndex(f)]++;
+    }
+  });
+  return dias;
+}
+
+function esHoy(fechaStr) {
+  if (!fechaStr) return false;
+  const hoy = new Date();
+  const f   = new Date(fechaStr);
+  return f.getDate()     === hoy.getDate()     &&
+         f.getMonth()    === hoy.getMonth()    &&
+         f.getFullYear() === hoy.getFullYear();
+}
+
+function formatearFechaHoy() {
+  const hoy    = new Date();
+  const dias   = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const meses  = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  return `${dias[hoy.getDay()]}, ${hoy.getDate()} de ${meses[hoy.getMonth()]}`;
+}
 
 export default function HomeScreen({ navigation, setToken }) {
-  const [nombreUsuario, setNombreUsuario] = useState('');
-  const [email, setEmail]                 = useState('');
-  const [drawerVisible, setDrawerVisible] = useState(false);
-  const [fabAbierto, setFabAbierto]       = useState(false);
-  const [busquedaVisible, setBusquedaVisible] = useState(false);
-  const [cedulaBusqueda, setCedulaBusqueda]   = useState('');
-  const [resultados, setResultados]           = useState([]);
-  const [cargandoBusqueda, setCargandoBusqueda] = useState(false);
-  const [totalHistorias, setTotalHistorias]   = useState(0);
-  const [pendientes, setPendientes]           = useState(0);
+  const insets = useSafeAreaInsets();
 
-  const fabAnim = useRef(new Animated.Value(0)).current;
+  const [nombreUsuario,  setNombreUsuario]  = useState('');
+  const [email,          setEmail]          = useState('');
+  const [drawerVisible,  setDrawerVisible]  = useState(false);
+  const [modalNueva,     setModalNueva]     = useState(false);
+  const [stats,          setStats]          = useState({ pacientes: 0, hoy: 0, pendientes: 0, ultimaSync: '' });
+  const [semana,         setSemana]         = useState([0, 0, 0, 0, 0, 0, 0]);
+  const [ultimaConsulta, setUltimaConsulta] = useState(null);
 
-  // Carga de datos al montar
-  useEffect(() => {
-    async function cargar() {
-      const n = await AsyncStorage.getItem('nombre');
-      const e = await AsyncStorage.getItem('email');
-      if (n) setNombreUsuario(n);
-      if (e) setEmail(e);
+ useEffect(() => { cargarDatos(); }, []);
+console.log ('USE EJECUTADO');
+useFocusEffect(
+  useCallback(() => { cargarDatos(); }, [])
+);
 
-      const historias = await obtenerTodasLasHistorias();
-      setTotalHistorias(historias.length);
+  async function cargarDatos() {
+    const n = await AsyncStorage.getItem('nombre');
+    const e = await AsyncStorage.getItem('email');
+    const s = await AsyncStorage.getItem('ultima_sincronizacion');
+      console.log('NOMBRE:', n, 'EMAIL:', e);
 
-      const pend = await contarHistoriasPendientes();
-      setPendientes(pend);
-    }
-    cargar();
-  }, []);
+    if (n) setNombreUsuario(n);
+    if (e) setEmail(e);
 
-  // ─── FAB ───────────────────────────────────────────────────────────────────
-  function toggleFab() {
-    const toValue = fabAbierto ? 0 : 1;
-    Animated.spring(fabAnim, { toValue, useNativeDriver: true, friction: 6 }).start();
-    setFabAbierto(!fabAbierto);
-  }
+    const todas      = await obtenerTodasLasHistorias();
+    const pendientes = await obtenerHistoriasPendientes();
 
-  function cerrarFab() {
-    Animated.spring(fabAnim, { toValue: 0, useNativeDriver: true, friction: 6 }).start();
-    setFabAbierto(false);
-  }
+    const cedulas = new Set(todas.map(h => {
+      try { return JSON.parse(h.datos)?.paciente?.cedula || h.id; } catch { return h.id; }
+    }));
 
-  const opcionStyle = (offset) => ({
-    opacity: fabAnim,
-    transform: [{
-      translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -offset] }),
-    }],
-  });
+    const hoy = todas.filter(h => esHoy(h.creado_en)).length;
+    setSemana(actividadSemana(todas));
+    setStats({
+      pacientes:  cedulas.size,
+      hoy,
+      pendientes: pendientes.length,
+      ultimaSync: s || 'Nunca',
+    });
 
-  // ─── Búsqueda ─────────────────────────────────────────────────────────────
-  async function buscarPaciente() {
-    if (!cedulaBusqueda.trim()) return;
-    setCargandoBusqueda(true);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      const resp = await fetch(`${CONFIG.CLINICAL_URL}/historias?cedula=${cedulaBusqueda}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        setResultados(Array.isArray(data) ? data : [data]);
-      } else {
-        setResultados([]);
-      }
-    } catch {
-      setResultados([]);
-    } finally {
-      setCargandoBusqueda(false);
+    if (todas.length > 0) {
+      try {
+        const datos = JSON.parse(todas[0].datos);
+        setUltimaConsulta({
+          nombre:  datos.paciente?.nombre,
+          cedula:  datos.paciente?.cedula,
+          fecha:   todas[0].creado_en,
+          motivo:  datos.anamnesis?.motivo || '',
+        });
+      } catch {}
     }
   }
 
-  const inicial = nombreUsuario ? nombreUsuario.charAt(0).toUpperCase() : 'A';
-  const paddingTop = Platform.OS === 'android' ? 45 : 10;
+  const paddingTop   = Platform.OS === 'android' ? 48 : 10;
+  const maxSemana    = Math.max(...semana, 1);
+  const inicial      = nombreUsuario ? nombreUsuario.charAt(0).toUpperCase() : 'A';
+  const diaHoyIdx    = getDiaIndex(new Date());   // índice del día actual en el array
+
+  const horaActual   = new Date().getHours();
+  const saludo       = horaActual < 12 ? 'Buenos días' : horaActual < 18 ? 'Buenas tardes' : 'Buenas noches';
+  const fechaHoy     = formatearFechaHoy();
 
   return (
     <View style={styles.raiz}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORES.primario} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORES.oscuro} />
 
-      {/* ── Header con gradiente ── */}
+      {/* ── Header ── */}
       <LinearGradient
         colors={[COLORES.gradienteInicio, COLORES.gradienteMedio]}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -99,224 +134,227 @@ export default function HomeScreen({ navigation, setToken }) {
       >
         <View style={styles.headerFila}>
           <TouchableOpacity onPress={() => setDrawerVisible(true)} style={styles.menuBtn}>
-            <Ionicons name="menu" size={24} color="#fff" />
+            <Ionicons name="menu" size={22} color="#fff" />
           </TouchableOpacity>
-
           <View style={styles.headerCentro}>
             <Text style={styles.headerTitulo}>ATHENEA</Text>
-            <Text style={styles.headerSub}>Su asistente clínica</Text>
+            <Text style={styles.headerSub}>{fechaHoy}</Text>
           </View>
-
-          <View style={styles.headerDerecha}>
-            <TouchableOpacity
-              style={styles.searchBtn}
-              onPress={() => { setResultados([]); setCedulaBusqueda(''); setBusquedaVisible(true); }}
-            >
-              <Ionicons name="search-outline" size={20} color="#fff" />
-            </TouchableOpacity>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarTexto}>{inicial}</Text>
-            </View>
-          </View>
+          <TouchableOpacity style={styles.avatar} onPress={() => navigation.navigate('Perfil')}>
+            <Text style={styles.avatarTexto}>{inicial}</Text>
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
-      {/* ── Contenido ── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Saludo */}
-        <View style={styles.saludo}>
-          <Text style={styles.saludoTexto}>¡Saludos!, {nombreUsuario || 'Especialista'}</Text>
+        <View style={styles.saludoArea}>
+          <Text style={styles.saludoTexto}>{saludo},</Text>
+          <View style={styles.saludoNombreFila}>
+            <Text style={styles.saludoNombre}>{nombreUsuario || 'Especialista'}</Text>
+            <View style={styles.iconoMedico}>
+              <Ionicons name="eye-outline" size={18} color={COLORES.primario} />
+            </View>
+          </View>
           <Text style={styles.saludoSub}>Panel de control</Text>
         </View>
 
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumero}>{totalHistorias > 0 ? totalHistorias : '--'}</Text>
-            <Text style={styles.statLabel}>Pacientes</Text>
-          </View>
-          <View style={[styles.statCard, pendientes > 0 && styles.statCardAdvertencia]}>
-            <Text style={[styles.statNumero, pendientes > 0 && { color: COLORES.advertencia }]}>
-              {pendientes}
-            </Text>
-            <Text style={styles.statLabel}>Pendientes</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: COLORES.primario }]}>
-            <Text style={[styles.statNumero, { color: '#fff' }]}>Activo</Text>
-            <Text style={[styles.statLabel, { color: 'rgba(255,255,255,0.8)' }]}>Sincro</Text>
-          </View>
+        {/* Stats grid */}
+        <View style={styles.statsGrid}>
+          <StatCard
+            icono="people-outline"
+            valor={stats.pacientes > 0 ? stats.pacientes : '--'}
+            label="Pacientes"
+            color={COLORES.primario}
+            bg={COLORES.secundario}
+            onPress={() => navigation.navigate('HistorialClinico')}
+          />
+          <StatCard
+            icono="today-outline"
+            valor={stats.hoy}
+            label="Hoy"
+            color={COLORES.info}
+            bg="#E3F2FD"
+            onPress={() => navigation.navigate('HistorialClinico')}
+          />
+          <StatCard
+            icono="cloud-upload-outline"
+            valor={stats.pendientes}
+            label="Pendientes"
+            color={stats.pendientes > 0 ? COLORES.advertencia : COLORES.exito}
+            bg={stats.pendientes > 0 ? '#FFF3E0' : '#E8F5E9'}
+            onPress={() => navigation.navigate('Ajustes')}
+          />
         </View>
 
-        {/* Hero card */}
+        {/* Nueva historia — hero card */}
         <TouchableOpacity
           style={styles.heroCard}
-          onPress={() => navigation.navigate('Grabacion')}
-          activeOpacity={0.9}
+          onPress={() => setModalNueva(true)}
+          activeOpacity={0.92}
         >
           <LinearGradient
             colors={[COLORES.gradienteInicio, COLORES.gradienteMedio, COLORES.gradienteFin]}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={styles.heroGradiente}
+            style={styles.heroGrad}
           >
             <View style={styles.heroInfo}>
               <Text style={styles.heroTitulo}>Nueva Historia</Text>
-              <Text style={styles.heroSub}>Grabar con Athenea</Text>
+              <Text style={styles.heroSub}>Grabar con Athenea IA</Text>
               <View style={styles.heroBadge}>
-                <Ionicons name="mic" size={12} color="#fff" />
-                <Text style={styles.heroBadgeTexto}>MODO SIN CONEXIÓN</Text>
+                <Ionicons name="mic" size={11} color="#fff" />
+                <Text style={styles.heroBadgeTexto}>Completación automática</Text>
               </View>
             </View>
             <View style={styles.heroIconCaja}>
-              <Ionicons name="eye" size={42} color="rgba(255,255,255,0.6)" />
+              <Ionicons name="eye" size={44} color="rgba(255,255,255,0.55)" />
             </View>
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Acciones rápidas */}
-        <View style={styles.seccion}>
-          <Text style={styles.seccionTitulo}>Acciones rápidas</Text>
-          <View style={styles.gridAcciones}>
-            <TouchableOpacity style={styles.accionItem} onPress={() => navigation.navigate('Formulario')}>
-              <View style={[styles.accionIcono, { backgroundColor: '#E3F2FD' }]}>
-                <Ionicons name="create-outline" size={22} color={COLORES.info} />
-              </View>
-              <Text style={styles.accionTexto}>Manual</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.accionItem} onPress={() => navigation.navigate('HistorialClinico')}>
-              <View style={[styles.accionIcono, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="folder-outline" size={22} color={COLORES.exito} />
-              </View>
-              <Text style={styles.accionTexto}>Historial</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.accionItem} onPress={() => { setResultados([]); setCedulaBusqueda(''); setBusquedaVisible(true); }}>
-              <View style={[styles.accionIcono, { backgroundColor: COLORES.secundario }]}>
-                <Ionicons name="search-outline" size={22} color={COLORES.primario} />
-              </View>
-              <Text style={styles.accionTexto}>Buscar</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.accionItem} onPress={() => navigation.navigate('Ajustes')}>
-              <View style={[styles.accionIcono, { backgroundColor: '#FFF3E0' }]}>
-                <Ionicons name="settings-outline" size={22} color={COLORES.advertencia} />
-              </View>
-              <Text style={styles.accionTexto}>Ajustes</Text>
-            </TouchableOpacity>
+        {/* Gráfico semanal */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="bar-chart-outline" size={16} color={COLORES.primario} />
+            <Text style={styles.cardTitulo}>Actividad semanal</Text>
+            <Text style={styles.cardSubtitulo}>Esta semana</Text>
           </View>
+          <View style={styles.grafico}>
+            {semana.map((val, i) => {
+              const altura   = Math.max((val / maxSemana) * 80, 4);
+              const esHoyBar = i === diaHoyIdx;
+              return (
+                <View key={i} style={styles.barraCol}>
+                  {val > 0 && <Text style={styles.barraNum}>{val}</Text>}
+                  <View style={styles.barraFondo}>
+                    <LinearGradient
+                      colors={esHoyBar
+                        ? [COLORES.gradienteMedio, COLORES.gradienteFin]
+                        : [COLORES.secundario, COLORES.borde]}
+                      style={[styles.barra, { height: altura }]}
+                    />
+                  </View>
+                  <Text style={[styles.diaLabel, esHoyBar && { color: COLORES.primario, fontWeight: '700' }]}>
+                    {DIAS_LABELS[i]}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+          <Text style={styles.syncTexto}>
+            Última sync: {stats.ultimaSync}
+          </Text>
         </View>
 
-        {/* Banner de sync */}
-        <View style={styles.syncBanner}>
-          <View style={styles.syncPunto} />
-          <Text style={styles.syncTexto}>Conectado · Sincronización activa</Text>
+        {/* Última consulta */}
+        {ultimaConsulta && (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="time-outline" size={16} color={COLORES.primario} />
+              <Text style={styles.cardTitulo}>Última consulta</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.ultimaFila}
+              onPress={() => navigation.navigate('HistorialClinico', { cedula: ultimaConsulta.cedula })}
+              activeOpacity={0.8}
+            >
+              <View style={styles.ultimaAvatar}>
+                <Text style={styles.ultimaAvatarTexto}>
+                  {ultimaConsulta.nombre?.charAt(0)?.toUpperCase() || '?'}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.ultimaNombre}>{ultimaConsulta.nombre || 'Paciente'}</Text>
+                {ultimaConsulta.motivo ? (
+                  <Text style={styles.ultimaMotivo} numberOfLines={1}>{ultimaConsulta.motivo}</Text>
+                ) : (
+                  <Text style={styles.ultimaSub}>CI: {ultimaConsulta.cedula}</Text>
+                )}
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORES.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Acciones rápidas */}
+        <Text style={styles.seccionTitulo}>Acciones rápidas</Text>
+        <View style={styles.accionesGrid}>
+          <AccionCard icono="mic-outline"           label="Nueva Historia" color={COLORES.primario}    bg={COLORES.secundario} onPress={() => setModalNueva(true)} />
+          <AccionCard icono="document-text-outline" label="Historial"      color={COLORES.info}        bg="#E3F2FD"            onPress={() => navigation.navigate('HistorialClinico')} />
+          <AccionCard icono="search-outline"        label="Buscar"         color="#7B1FA2"             bg="#F3E5F5"            onPress={() => navigation.navigate('BuscarPaciente')} />
+          <AccionCard icono="receipt-outline"       label="Receta PDF"     color={COLORES.advertencia} bg="#FFF3E0"            onPress={() => navigation.navigate('GenerarReceta', { historia: null })} />
+        </View>
+
+        {/* Banner sync */}
+        <View style={[styles.syncBanner, stats.pendientes > 0 && styles.syncBannerAlerta]}>
+          <View style={[styles.syncPunto, { backgroundColor: stats.pendientes > 0 ? COLORES.advertencia : COLORES.exito }]} />
+          <Text style={[styles.syncBannerTexto, stats.pendientes > 0 && { color: COLORES.advertencia }]}>
+            {stats.pendientes > 0
+              ? `${stats.pendientes} historia(s) pendiente(s) de sincronizar`
+              : 'Conectado · Sincronización activa'}
+          </Text>
+          {stats.pendientes > 0 && (
+            <TouchableOpacity onPress={() => navigation.navigate('Ajustes')}>
+              <Text style={styles.syncLink}>Sincronizar</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
 
-      {/* ── Modal de búsqueda ── */}
-      <Modal
-        visible={busquedaVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setBusquedaVisible(false)}
-      >
+      {/* ── Modal Nueva Historia ── */}
+      <Modal visible={modalNueva} transparent animationType="fade" onRequestClose={() => setModalNueva(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCaja}>
+          <View style={[styles.modalCaja, { paddingBottom: insets.bottom + 24 }]}>
             <View style={styles.modalBarra} />
-            <View style={styles.modalHeaderFila}>
-              <Text style={styles.modalTitulo}>Buscar Paciente</Text>
-              <TouchableOpacity onPress={() => setBusquedaVisible(false)} style={styles.modalCerrarBtn}>
-                <Ionicons name="close" size={20} color={COLORES.mutedForeground} />
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.modalTitulo}>Nueva Historia Clínica</Text>
+            <Text style={styles.modalSub}>¿Cómo deseas registrar la consulta?</Text>
 
-            <View style={styles.modalBusqueda}>
-              <Ionicons name="card-outline" size={18} color={COLORES.mutedForeground} style={{ marginLeft: 12 }} />
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Número de cédula..."
-                placeholderTextColor={COLORES.mutedForeground}
-                keyboardType="numeric"
-                value={cedulaBusqueda}
-                onChangeText={setCedulaBusqueda}
-                autoFocus
-              />
-              <TouchableOpacity style={styles.modalBuscarBtn} onPress={buscarPaciente}>
-                {cargandoBusqueda
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.modalBuscarTexto}>Buscar</Text>}
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.modalOpcion}
+              onPress={() => { setModalNueva(false); navigation.navigate('Grabacion'); }}
+            >
+              <LinearGradient
+                colors={[COLORES.primario, COLORES.gradienteFin]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.modalOpcionGrad}
+              >
+                <View style={styles.modalOpcionIcon}>
+                  <Ionicons name="mic" size={28} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalOpcionTitulo}>Grabar con Athenea IA</Text>
+                  <Text style={styles.modalOpcionSub}>Dictado por voz · Rellena automáticamente</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+              </LinearGradient>
+            </TouchableOpacity>
 
-            <FlatList
-              data={resultados}
-              keyExtractor={(item) => item._id || String(Math.random())}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.resultadoItem}
-                  onPress={() => { setBusquedaVisible(false); navigation.navigate('Formulario', { historiaExistente: item }); }}
-                >
-                  <View style={styles.resultadoAvatar}>
-                    <Text style={styles.resultadoAvatarTexto}>
-                      {item.paciente?.nombre?.charAt(0)?.toUpperCase() || '?'}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.resultadoNombre}>{item.paciente?.nombre || 'Paciente'}</Text>
-                    <Text style={styles.resultadoSub}>CI: {item.paciente?.cedula}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={COLORES.mutedForeground} />
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                !cargandoBusqueda
-                  ? <Text style={styles.vacioTexto}>{cedulaBusqueda ? 'Sin resultados' : 'Ingresa un número de cédula'}</Text>
-                  : null
-              }
-            />
+            <TouchableOpacity
+              style={[styles.modalOpcion, { marginTop: 10 }]}
+              onPress={() => { setModalNueva(false); navigation.navigate('Formulario'); }}
+            >
+              <View style={styles.modalOpcionManual}>
+                <View style={[styles.modalOpcionIcon, { backgroundColor: COLORES.secundario }]}>
+                  <Ionicons name="create-outline" size={28} color={COLORES.primario} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.modalOpcionTitulo, { color: COLORES.oscuro }]}>Ingresar manualmente</Text>
+                  <Text style={[styles.modalOpcionSub, { color: COLORES.mutedForeground }]}>Formulario paso a paso</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={COLORES.mutedForeground} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalCancelar} onPress={() => setModalNueva(false)}>
+              <Text style={styles.modalCancelarTexto}>Cancelar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
-
-      {/* ── FAB ── */}
-      {fabAbierto && <TouchableOpacity style={styles.fabOverlay} onPress={cerrarFab} activeOpacity={1} />}
-
-      <View style={styles.fabContenedor}>
-        <Animated.View style={[styles.fabOpcion, opcionStyle(130)]}>
-          <TouchableOpacity
-            style={[styles.fabOpcionBtn, { backgroundColor: COLORES.info }]}
-            onPress={() => { cerrarFab(); navigation.navigate('Grabacion'); }}
-          >
-            <Ionicons name="mic" size={22} color="#fff" />
-          </TouchableOpacity>
-        </Animated.View>
-
-        <Animated.View style={[styles.fabOpcion, opcionStyle(70)]}>
-          <TouchableOpacity
-            style={[styles.fabOpcionBtn, { backgroundColor: COLORES.oscuro }]}
-            onPress={() => { cerrarFab(); navigation.navigate('Formulario'); }}
-          >
-            <Ionicons name="create-outline" size={22} color="#fff" />
-          </TouchableOpacity>
-        </Animated.View>
-
-        <TouchableOpacity style={styles.fabPrincipal} onPress={toggleFab}>
-          <LinearGradient
-            colors={[COLORES.primario, COLORES.gradienteFin]}
-            style={styles.fabGradiente}
-          >
-            <Animated.View style={{
-              transform: [{ rotate: fabAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }) }],
-            }}>
-              <Ionicons name="add" size={30} color="#fff" />
-            </Animated.View>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
 
       {/* ── Drawer ── */}
       <DrawerMenu
@@ -332,76 +370,115 @@ export default function HomeScreen({ navigation, setToken }) {
   );
 }
 
+function StatCard({ icono, valor, label, color, bg, onPress }) {
+  return (
+    <TouchableOpacity
+      style={[styles.statCard, { backgroundColor: bg }]}
+      onPress={onPress}
+      disabled={!onPress}
+      activeOpacity={0.8}
+    >
+      <View style={[styles.statIconCaja, { backgroundColor: color + '22' }]}>
+        <Ionicons name={icono} size={18} color={color} />
+      </View>
+      <Text style={[styles.statValor, { color }]}>{valor}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function AccionCard({ icono, label, color, bg, onPress }) {
+  return (
+    <TouchableOpacity style={[styles.accionCard, { backgroundColor: bg }]} onPress={onPress} activeOpacity={0.8}>
+      <View style={[styles.accionIconCaja, { backgroundColor: color + '22' }]}>
+        <Ionicons name={icono} size={24} color={color} />
+      </View>
+      <Text style={[styles.accionLabel, { color: COLORES.foreground }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
-  raiz:  { flex: 1, backgroundColor: COLORES.fondo },
-  header: { paddingHorizontal: 20, paddingBottom: 20, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, elevation: 8 },
-  headerFila: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  menuBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
-  headerCentro: { alignItems: 'center' },
+  raiz:   { flex: 1, backgroundColor: COLORES.fondo },
+  header: { paddingHorizontal: 20, paddingBottom: 20 },
+  headerFila:   { flexDirection: 'row', alignItems: 'center' },
+  menuBtn:      { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  headerCentro: { flex: 1, alignItems: 'center' },
   headerTitulo: { fontSize: 20, fontWeight: '900', color: '#fff', letterSpacing: 4 },
-  headerSub:    { fontSize: 10, color: 'rgba(255,255,255,0.7)', letterSpacing: 0.5 },
-  headerDerecha: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  searchBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
-  avatar:    { width: 40, height: 40, borderRadius: 14, backgroundColor: COLORES.oscuro, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)' },
-  avatarTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  headerSub:    { fontSize: 10, color: 'rgba(255,255,255,0.7)', letterSpacing: 0.3, marginTop: 2 },
+  avatar:       { width: 40, height: 40, borderRadius: 14, backgroundColor: COLORES.oscuro, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)' },
+  avatarTexto:  { fontSize: 16, fontWeight: '700', color: '#fff' },
 
-  scroll:       { flex: 1 },
-  scrollContent: { paddingTop: 24, paddingBottom: 120 },
+  scroll:        { flex: 1 },
+  scrollContent: { padding: 16 },
 
-  saludo:     { paddingHorizontal: 24, marginBottom: 20 },
-  saludoTexto: { fontSize: 26, fontWeight: '800', color: COLORES.oscuro },
-  saludoSub:   { fontSize: 14, color: COLORES.mutedForeground, marginTop: 4 },
+  saludoArea:       { marginBottom: 20 },
+  saludoTexto:      { fontSize: 15, color: COLORES.mutedForeground, fontWeight: '500' },
+  saludoNombreFila: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 },
+  saludoNombre:     { fontSize: 28, fontWeight: '800', color: COLORES.oscuro },
+  saludoSub:        { fontSize: 13, color: COLORES.mutedForeground, marginTop: 2 },
+  iconoMedico:      { width: 32, height: 32, borderRadius: 10, backgroundColor: COLORES.secundario, justifyContent: 'center', alignItems: 'center' },
 
-  statsRow: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 24, gap: 10 },
-  statCard: { flex: 1, backgroundColor: '#fff', padding: 15, borderRadius: 20, alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
-  statCardAdvertencia: { borderWidth: 1, borderColor: COLORES.advertencia },
-  statNumero: { fontSize: 20, fontWeight: '800', color: COLORES.primario },
-  statLabel:  { fontSize: 11, color: COLORES.mutedForeground, marginTop: 2 },
+  statsGrid: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  statCard:  { flex: 1, borderRadius: 18, padding: 14, alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 1 } },
+  statIconCaja: { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  statValor:    { fontSize: 22, fontWeight: '800' },
+  statLabel:    { fontSize: 11, color: COLORES.mutedForeground, marginTop: 2, fontWeight: '600' },
 
-  heroCard: { marginHorizontal: 20, borderRadius: 28, overflow: 'hidden', marginBottom: 32, elevation: 8, shadowColor: COLORES.primario, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14 },
-  heroGradiente: { padding: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heroInfo:   { flex: 1 },
-  heroTitulo: { fontSize: 22, fontWeight: '800', color: '#fff' },
-  heroSub:    { fontSize: 13, color: 'rgba(255,255,255,0.65)', marginTop: 4, marginBottom: 14 },
-  heroBadge:  { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, gap: 5 },
-  heroBadgeTexto: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  heroIconCaja: { width: 70, height: 70, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  heroCard: { borderRadius: 24, overflow: 'hidden', marginBottom: 16, elevation: 6, shadowColor: COLORES.primario, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 12 },
+  heroGrad: { padding: 24, flexDirection: 'row', alignItems: 'center' },
+  heroInfo: { flex: 1 },
+  heroTitulo:     { fontSize: 22, fontWeight: '800', color: '#fff' },
+  heroSub:        { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 4, marginBottom: 14 },
+  heroBadge:      { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, gap: 5 },
+  heroBadgeTexto: { color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  heroIconCaja:   { width: 72, height: 72, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
 
-  seccion:       { paddingHorizontal: 20, marginBottom: 24 },
-  seccionTitulo: { fontSize: 17, fontWeight: '700', color: COLORES.oscuro, marginBottom: 18 },
-  gridAcciones:  { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  accionItem:    { width: '22%', alignItems: 'center', marginBottom: 20 },
-  accionIcono:   { width: 55, height: 55, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 8, elevation: 2 },
-  accionTexto:   { fontSize: 12, fontWeight: '600', color: COLORES.mutedForeground },
+  card:       { backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 16, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 1 } },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  cardTitulo: { fontSize: 14, fontWeight: '700', color: COLORES.oscuro, flex: 1 },
+  cardSubtitulo: { fontSize: 11, color: COLORES.mutedForeground, fontWeight: '500' },
 
-  syncBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORES.secundario, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, marginHorizontal: 20 },
-  syncPunto:  { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORES.exito, marginRight: 8 },
-  syncTexto:  { fontSize: 12, color: COLORES.primario, fontWeight: '700' },
+  grafico:    { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 100, marginBottom: 8 },
+  barraCol:   { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
+  barraFondo: { width: '60%', alignItems: 'center' },
+  barra:      { width: '100%', borderRadius: 6 },
+  barraNum:   { fontSize: 9, color: COLORES.primario, fontWeight: '700', marginBottom: 2 },
+  diaLabel:   { fontSize: 10, color: COLORES.mutedForeground, marginTop: 4 },
+  syncTexto:  { fontSize: 10, color: COLORES.mutedForeground, textAlign: 'right', marginTop: 4 },
 
-  // Modal
+  ultimaFila:        { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  ultimaAvatar:      { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORES.secundario, justifyContent: 'center', alignItems: 'center' },
+  ultimaAvatarTexto: { fontSize: 20, fontWeight: '700', color: COLORES.primario },
+  ultimaNombre:      { fontSize: 15, fontWeight: '700', color: COLORES.oscuro },
+  ultimaSub:         { fontSize: 12, color: COLORES.mutedForeground, marginTop: 2 },
+  ultimaMotivo:      { fontSize: 12, color: COLORES.mutedForeground, marginTop: 2, fontStyle: 'italic' },
+
+  seccionTitulo: { fontSize: 16, fontWeight: '700', color: COLORES.oscuro, marginBottom: 12 },
+  accionesGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
+  accionCard:    { width: (width - 52) / 2, borderRadius: 18, padding: 16, elevation: 2, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 1 } },
+  accionIconCaja: { width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  accionLabel:   { fontSize: 14, fontWeight: '600' },
+
+  syncBanner:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F5E9', borderRadius: 14, padding: 12, gap: 8 },
+  syncBannerAlerta: { backgroundColor: '#FFF8E1' },
+  syncPunto:        { width: 8, height: 8, borderRadius: 4 },
+  syncBannerTexto:  { flex: 1, fontSize: 12, color: COLORES.exito, fontWeight: '600' },
+  syncLink:         { fontSize: 12, color: COLORES.primario, fontWeight: '700' },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(13,59,68,0.7)', justifyContent: 'flex-end' },
-  modalCaja:    { backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, maxHeight: '80%' },
+  modalCaja:    { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24 },
   modalBarra:   { width: 50, height: 5, backgroundColor: COLORES.borde, borderRadius: 3, alignSelf: 'center', marginBottom: 20 },
-  modalHeaderFila: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitulo:  { fontSize: 20, fontWeight: '800', color: COLORES.oscuro },
-  modalCerrarBtn: { width: 32, height: 32, backgroundColor: COLORES.muted, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  modalBusqueda: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORES.muted, borderRadius: 16, marginBottom: 16, borderWidth: 1.5, borderColor: COLORES.borde },
-  modalInput:   { flex: 1, paddingHorizontal: 12, paddingVertical: 14, fontSize: 15, color: COLORES.foreground },
-  modalBuscarBtn: { backgroundColor: COLORES.primario, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, margin: 5 },
-  modalBuscarTexto: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  modalTitulo:  { fontSize: 20, fontWeight: '800', color: COLORES.oscuro, marginBottom: 4 },
+  modalSub:     { fontSize: 13, color: COLORES.mutedForeground, marginBottom: 20 },
 
-  resultadoItem:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: COLORES.muted, gap: 12 },
-  resultadoAvatar:     { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORES.secundario, justifyContent: 'center', alignItems: 'center' },
-  resultadoAvatarTexto: { fontSize: 16, fontWeight: '700', color: COLORES.primario },
-  resultadoNombre:     { fontSize: 15, fontWeight: '700', color: COLORES.oscuro },
-  resultadoSub:        { fontSize: 12, color: COLORES.mutedForeground },
-  vacioTexto:          { textAlign: 'center', color: COLORES.mutedForeground, marginTop: 32, fontSize: 14 },
+  modalOpcion:       { borderRadius: 18, overflow: 'hidden' },
+  modalOpcionGrad:   { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
+  modalOpcionManual: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14, backgroundColor: COLORES.muted, borderRadius: 18 },
+  modalOpcionIcon:   { width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  modalOpcionTitulo: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 2 },
+  modalOpcionSub:    { fontSize: 12, color: 'rgba(255,255,255,0.75)' },
 
-  // FAB
-  fabOverlay:    { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.05)', zIndex: 98 },
-  fabContenedor: { position: 'absolute', bottom: 30, right: 24, alignItems: 'center', zIndex: 99 },
-  fabPrincipal:  { width: 62, height: 62, borderRadius: 22, overflow: 'hidden', elevation: 8, shadowColor: COLORES.primario, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 },
-  fabGradiente:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  fabOpcion:     { position: 'absolute', right: 6 },
-  fabOpcionBtn:  { width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  modalCancelar:      { marginTop: 16, alignItems: 'center', paddingVertical: 12 },
+  modalCancelarTexto: { fontSize: 14, color: COLORES.mutedForeground, fontWeight: '600' },
 });

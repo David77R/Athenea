@@ -227,16 +227,35 @@ async function procesarConGroq(rawText) {
     messages: [
       {
         role: "system",
-        content: `Eres un asistente médico especializado en optometría venezolana.
+        content: `Eres un asistente médico especializado en optometría venezolana de un consultorio optométrico venezolano.
 Recibes el dictado de voz de un especialista y debes extraer TODOS los datos clínicos.
 
-REGLAS IMPORTANTES:
+REGLAS CRÍTICAS:
 - Responde ÚNICAMENTE con un objeto JSON válido, sin texto previo, sin backticks, sin explicaciones.
-- Convierte números en palabras a dígitos: "veinte cuarenta" → "20/40", "menos uno punto cinco" → "-1.50", "ciento ochenta" → "180".
-- Las cédulas venezolanas tienen 7-8 dígitos. Extrae solo los dígitos.
-- La agudeza visual se expresa como fracción: "veinte veinte" → "20/20".
 - Si un dato no se menciona, deja el campo como string vacío "" o false para booleanos.
 - No inventes datos que no estén en el dictado.
+
+CONVERSIÓN DE NÚMEROS:
+- Convierte TODOS los números en palabras a dígitos.
+- Teléfonos: "cero cuatro ciento veinticuatro cinco seis siete ocho nueve cero" → "04124567890". Procesa dígito por dígito después del prefijo.
+- Cédulas venezolanas: 7-8 dígitos. "dieciséis cuatro tres dos uno ocho" → "16432108". Solo dígitos, sin letras.
+- Agudeza visual: "veinte treinta" → "20/30", "veinte veinte" → "20/20".
+- Refracción: "más uno punto veinticinco" → "+1.25", "menos cero punto cincuenta" → "-0.50", "ciento ochenta" → "180".
+- Adición: si dice "adición más dos punto veinticinco ambos ojos" → add_od: "+2.25" y add_oi: "+2.25".
+
+SEPARACIÓN DE CAMPOS — MUY IMPORTANTE:
+- "motivo" es SOLO el síntoma principal en una frase corta. Ej: "visión borrosa de cerca y cansancio visual al leer".
+- "tiempoEvolucion" es el tiempo que lleva con el problema. Ej: "seis meses" → "6 meses".
+- "antOcularPersonal" son antecedentes oculares personales (cirugías, enfermedades oculares previas).
+- "antOcularFamiliar" son antecedentes familiares oculares (glaucoma, catarata en familia).
+- "antMedicos" son enfermedades generales (diabetes, hipertensión, alergias). Ej: "hipertensión controlada".
+- "usaLentes" es true si menciona que usa lentes actualmente.
+- "tipoLentes" es el tipo de lentes que usa actualmente. Ej: "monofocales".
+- NO metas tiempoEvolucion ni antecedentes dentro de motivo.
+
+DIAGNÓSTICO:
+- "diagnosisPreliminary" debe ser solo el nombre de la condición, SIN agregar "(preliminar)" ni ningún sufijo.
+- Ej: "presbicia con hipermetropía leve" NO "presbicia con hipermetropía leve (preliminar)".
 
 Devuelve exactamente esta estructura JSON:
 ${plantilla}`,
@@ -254,6 +273,8 @@ ${plantilla}`,
   const contenido = completion.choices[0]?.message?.content || "{}";
   const limpio    = contenido.replace(/```json|```/g, "").trim();
   const datos     = JSON.parse(limpio);
+    datos.paciente.nombre = datos.paciente.nombre.charAt(0).toUpperCase() + datos.paciente.nombre.slice(1).toLowerCase();
+
   return { ...datos, narrative: rawText, _fuente: "groq" };
 }
 

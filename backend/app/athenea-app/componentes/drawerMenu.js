@@ -1,12 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Animated, Dimensions, TouchableWithoutFeedback, Alert
+  Animated, Dimensions, TouchableWithoutFeedback, ScrollView
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { obtenerTodasLasHistorias } from '../baseDatosLite/basedatoslt';
+import { useAlerta } from '../componentes/AlertaPersonalizada';
 
 const { width } = Dimensions.get('window');
 const DRAWER_WIDTH = width * 0.82;
@@ -21,10 +23,11 @@ const VERDE        = '#4CAF50';
 const ROJO         = '#EF5350';
 
 const MENU_PRINCIPAL = [
-  { name: 'Home',             label: 'Inicio',           icono: 'home-outline' },
-  { name: 'BuscarPaciente',   label: 'Pacientes',        icono: 'search-outline' },
+  { name: 'Home',             label: 'Inicio',            icono: 'home-outline' },
+  { name: 'BuscarPaciente',   label: 'Pacientes',         icono: 'search-outline' },
   { name: 'HistorialClinico', label: 'Historial clínico', icono: 'document-text-outline' },
-  { name: 'Ajustes',          label: 'Ajustes',          icono: 'settings-outline' },
+  { name: 'Perfil',           label: 'Mi perfil',         icono: 'person-outline' },
+  { name: 'Ajustes',          label: 'Ajustes',           icono: 'settings-outline' },
 ];
 
 const ACCIONES = [
@@ -34,13 +37,15 @@ const ACCIONES = [
 ];
 
 export default function DrawerMenu({ visible, onClose, navigation, setToken, nombreUsuario, email, pantallaActual }) {
-  const translateX   = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const opacidad     = useRef(new Animated.Value(0)).current;
-  const [montado,    setMontado]    = useState(false);
-  const [stats,      setStats]      = useState({ pacientes: 0, consultas: 0 });
-  const [subMenu,    setSubMenu]    = useState(false);
+  const insets     = useSafeAreaInsets();
+  const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+  const opacidad   = useRef(new Animated.Value(0)).current;
+  const [montado,  setMontado]  = useState(false);
+  const [stats,    setStats]    = useState({ pacientes: 0, consultas: 0 });
+  const [subMenu,  setSubMenu]  = useState(false);
 
-  // Animaciones en cascada para cada item
+  const { mostrar, AlertaPersonalizada } = useAlerta();
+
   const itemAnims = useRef(
     [...Array(MENU_PRINCIPAL.length + ACCIONES.length + 2)].map(() => new Animated.Value(0))
   ).current;
@@ -51,25 +56,20 @@ export default function DrawerMenu({ visible, onClose, navigation, setToken, nom
       setSubMenu(false);
       cargarStats();
 
-      // Drawer entra
       Animated.parallel([
-        Animated.timing(translateX, { toValue: 0, duration: 300, useNativeDriver: true }),
-        Animated.timing(opacidad,   { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(translateX, { toValue: 0,            duration: 300, useNativeDriver: true }),
+        Animated.timing(opacidad,   { toValue: 1,            duration: 300, useNativeDriver: true }),
       ]).start(() => {
-        // Items en cascada después de que el drawer entra
         const animaciones = itemAnims.map((anim, i) =>
           Animated.spring(anim, {
-            toValue: 1,
-            delay: i * 40,
-            tension: 80,
-            friction: 10,
+            toValue: 1, delay: i * 20,
+            tension: 120, friction: 8,
             useNativeDriver: true,
           })
         );
-        Animated.stagger(40, animaciones).start();
+        Animated.stagger(20, animaciones).start();
       });
     } else {
-      // Resetear items antes de salir
       itemAnims.forEach(a => a.setValue(0));
       Animated.parallel([
         Animated.timing(translateX, { toValue: -DRAWER_WIDTH, duration: 240, useNativeDriver: true }),
@@ -90,20 +90,26 @@ export default function DrawerMenu({ visible, onClose, navigation, setToken, nom
     }
   }
 
-  async function handleLogout() {
-    Alert.alert('Cerrar sesión', '¿Estás seguro de que deseas salir?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Cerrar sesión', style: 'destructive',
-        onPress: async () => {
-          onClose();
-          await AsyncStorage.multiRemove(['token', 'nombre', 'email', 'perfil_especialista']);
-          setToken(null);
-        },
-      },
-    ]);
+ function handleLogout() {
+  mostrar({
+    tipo: 'confirmacion',
+    titulo: 'Cerrar sesión',
+    mensaje: '¿Desea usted salir de su cuenta?',
+    icono: 'log-out-outline',
+    botonCancelar: 'Cancelar',
+    botonConfirmar: 'Cerrar sesión',
+onConfirmar: async () => {
+  try {
+    const { borrarTodasLasHistorias } = await import('../baseDatosLite/basedatoslt');
+    await borrarTodasLasHistorias();
+    await AsyncStorage.multiRemove(['token', 'nombre', 'email', 'perfil_especialista']);
+  } catch(e) {
+    console.log('ERROR LOGOUT:', e.message);
   }
-
+  setTimeout(() => setToken(null), 300);
+},
+  });
+}
   function navegar(pantalla) {
     setSubMenu(false);
     onClose();
@@ -112,7 +118,7 @@ export default function DrawerMenu({ visible, onClose, navigation, setToken, nom
 
   function handleAccion(name) {
     if (name === 'SUBMENU') { setSubMenu(!subMenu); return; }
-if (name === 'RECETA') { navegar('GenerarReceta'); return; }
+    if (name === 'RECETA')  { navegar('GenerarReceta'); return; }
     navegar(name);
   }
 
@@ -141,130 +147,138 @@ if (name === 'RECETA') { navegar('GenerarReceta'); return; }
 
       {/* Drawer */}
       <Animated.View style={[styles.drawer, { transform: [{ translateX }] }]}>
-
-        {/* Header */}
-        <View style={styles.header}>
-          <Animated.View style={itemStyle(itemAnims[animIdx++])}>
-            <View style={styles.headerFila}>
-              <View style={styles.logoCirculo}>
-                <Ionicons name="eye-outline" size={22} color={TEXTO_BLANCO} />
+        <ScrollView
+          contentContainerStyle={[styles.drawerContent, { paddingBottom: insets.bottom + 20 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <Animated.View style={itemStyle(itemAnims[animIdx++])}>
+              <View style={styles.headerFila}>
+                <View style={styles.logoCirculo}>
+                  <Ionicons name="eye-outline" size={22} color={TEXTO_BLANCO} />
+                </View>
+                <View>
+                  <Text style={styles.appNombre}>Athenea</Text>
+                  <Text style={styles.appSub}>Optometría Clínica</Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.appNombre}>Athenea</Text>
-                <Text style={styles.appSub}>Optometría Clínica</Text>
-              </View>
-            </View>
-          </Animated.View>
+            </Animated.View>
 
-          <Animated.View style={itemStyle(itemAnims[animIdx++])}>
-            <View style={styles.usuarioFila}>
-              <View style={styles.avatarCirculo}>
-                <Text style={styles.avatarTexto}>{inicial}</Text>
+            <Animated.View style={itemStyle(itemAnims[animIdx++])}>
+              <View style={styles.usuarioFila}>
+                <View style={styles.avatarCirculo}>
+                  <Text style={styles.avatarTexto}>{inicial}</Text>
+                </View>
+                <View>
+                  <Text style={styles.usuarioNombre}>{nombreUsuario || 'Especialista'}</Text>
+                  <Text style={styles.usuarioEmail}>{email || 'Optometría Clínica'}</Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.usuarioNombre}>{nombreUsuario || 'Especialista'}</Text>
-                <Text style={styles.usuarioEmail}>{email || 'Optometría Clínica'}</Text>
-              </View>
-            </View>
-          </Animated.View>
-        </View>
+            </Animated.View>
+          </View>
 
-        {/* Menú principal */}
-        <View style={styles.seccion}>
-          <Text style={styles.seccionLabel}>MENÚ PRINCIPAL</Text>
-          {MENU_PRINCIPAL.map((item) => {
-            const anim   = itemAnims[animIdx++];
-            const activo = pantallaActual === item.name;
-            return (
-              <Animated.View key={item.name} style={itemStyle(anim)}>
-                <TouchableOpacity
-                  style={[styles.menuItem, activo && styles.menuItemActivo]}
-                  onPress={() => navegar(item.name)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.iconoCaja, activo && styles.iconoCajaActivo]}>
-                    <Ionicons name={item.icono} size={18} color={activo ? TEXTO_BLANCO : TEXTO_GRIS} />
-                  </View>
-                  <Text style={[styles.menuTexto, activo && styles.menuTextoActivo]}>{item.label}</Text>
-                  {activo && <View style={styles.activoPunto} />}
-                </TouchableOpacity>
-              </Animated.View>
-            );
-          })}
-        </View>
+          {/* Menú principal */}
+          <View style={styles.seccion}>
+            <Text style={styles.seccionLabel}>MENÚ PRINCIPAL</Text>
+            {MENU_PRINCIPAL.map((item) => {
+              const anim   = itemAnims[animIdx++];
+              const activo = pantallaActual === item.name;
+              return (
+                <Animated.View key={item.name} style={itemStyle(anim)}>
+                  <TouchableOpacity
+                    style={[styles.menuItem, activo && styles.menuItemActivo]}
+                    onPress={() => navegar(item.name)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.iconoCaja, activo && styles.iconoCajaActivo]}>
+                      <Ionicons name={item.icono} size={18} color={activo ? TEXTO_BLANCO : TEXTO_GRIS} />
+                    </View>
+                    <Text style={[styles.menuTexto, activo && styles.menuTextoActivo]}>{item.label}</Text>
+                    {activo && <View style={styles.activoPunto} />}
+                  </TouchableOpacity>
+                </Animated.View>
+              );
+            })}
+          </View>
 
-        {/* Acciones rápidas */}
-        <View style={styles.seccion}>
-          <Text style={styles.seccionLabel}>ACCIONES RÁPIDAS</Text>
-          {ACCIONES.map((item) => {
-            const anim = itemAnims[animIdx++];
-            return (
-              <Animated.View key={item.name} style={itemStyle(anim)}>
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => handleAccion(item.name)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.iconoCaja}>
-                    <Ionicons name={item.icono} size={18} color={TEXTO_GRIS} />
-                  </View>
-                  <Text style={[styles.menuTexto, { flex: 1 }]}>{item.label}</Text>
-                  {item.tieneFlecha && (
-                    <Ionicons
-                      name={subMenu ? 'chevron-down' : 'chevron-forward'}
-                      size={14} color={TEXTO_GRIS}
-                    />
+          {/* Acciones rápidas */}
+          <View style={styles.seccion}>
+            <Text style={styles.seccionLabel}>ACCIONES RÁPIDAS</Text>
+            {ACCIONES.map((item) => {
+              const anim = itemAnims[animIdx++];
+              return (
+                <Animated.View key={item.name} style={itemStyle(anim)}>
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => handleAccion(item.name)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.iconoCaja}>
+                      <Ionicons name={item.icono} size={18} color={TEXTO_GRIS} />
+                    </View>
+                    <Text style={[styles.menuTexto, { flex: 1 }]}>{item.label}</Text>
+                    {item.tieneFlecha && (
+                      <Ionicons
+                        name={subMenu ? 'chevron-down' : 'chevron-forward'}
+                        size={14} color={TEXTO_GRIS}
+                      />
+                    )}
+                  </TouchableOpacity>
+
+                  {item.tieneFlecha && subMenu && (
+                    <View style={styles.subMenu}>
+                      <TouchableOpacity style={styles.subItem} onPress={() => navegar('Grabacion')}>
+                        <Ionicons name="mic" size={13} color={TEXTO_GRIS} />
+                        <Text style={styles.subItemTexto}>Grabar con Athenea IA</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.subItem} onPress={() => navegar('Formulario')}>
+                        <Ionicons name="create-outline" size={13} color={TEXTO_GRIS} />
+                        <Text style={styles.subItemTexto}>Llenar manualmente</Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
-                </TouchableOpacity>
-
-                {item.tieneFlecha && subMenu && (
-                  <View style={styles.subMenu}>
-                    <TouchableOpacity style={styles.subItem} onPress={() => navegar('Grabacion')}>
-                      <Ionicons name="mic" size={13} color={TEXTO_GRIS} />
-                      <Text style={styles.subItemTexto}>Grabar con Athenea IA</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.subItem} onPress={() => navegar('Formulario')}>
-                      <Ionicons name="create-outline" size={13} color={TEXTO_GRIS} />
-                      <Text style={styles.subItemTexto}>Llenar manualmente</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </Animated.View>
-            );
-          })}
-        </View>
-
-        {/* Stats */}
-        <Animated.View style={itemStyle(itemAnims[Math.min(animIdx, itemAnims.length - 1)])}>
-          <View style={styles.statsBox}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNum}>{stats.pacientes}</Text>
-              <Text style={styles.statLabel}>Pacientes</Text>
-            </View>
-            <View style={styles.statSep} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNum}>{stats.consultas}</Text>
-              <Text style={styles.statLabel}>Consultas</Text>
-            </View>
+                </Animated.View>
+              );
+            })}
           </View>
-        </Animated.View>
 
-        {/* Cerrar sesión */}
-        <TouchableOpacity style={styles.cerrarSesion} onPress={handleLogout}>
-          <View style={[styles.iconoCaja, { backgroundColor: 'rgba(239,83,80,0.15)', marginRight: 12 }]}>
-            <Ionicons name="log-out-outline" size={18} color={ROJO} />
-          </View>
-          <Text style={styles.cerrarTexto}>Cerrar sesión</Text>
-        </TouchableOpacity>
+          {/* Stats */}
+          <Animated.View style={itemStyle(itemAnims[Math.min(animIdx, itemAnims.length - 1)])}>
+            <View style={styles.statsBox}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNum}>{stats.pacientes}</Text>
+                <Text style={styles.statLabel}>Pacientes</Text>
+              </View>
+              <View style={styles.statSep} />
+              <View style={styles.statItem}>
+                <Text style={styles.statNum}>{stats.consultas}</Text>
+                <Text style={styles.statLabel}>Consultas</Text>
+              </View>
+            </View>
+          </Animated.View>
 
+          {/* Cerrar sesión */}
+          <TouchableOpacity style={styles.cerrarSesion} onPress={handleLogout}>
+            <View style={[styles.iconoCaja, { backgroundColor: 'rgba(239,83,80,0.15)', marginRight: 12 }]}>
+              <Ionicons name="log-out-outline" size={18} color={ROJO} />
+            </View>
+            <Text style={styles.cerrarTexto}>Cerrar sesión</Text>
+          </TouchableOpacity>
+
+        </ScrollView>
       </Animated.View>
+
+      {/* AlertaPersonalizada fuera del ScrollView para que se muestre encima de todo */}
+      <AlertaPersonalizada />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay:  { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999, flexDirection: 'row' },
-  drawer:   { width: DRAWER_WIDTH, backgroundColor: AZUL_OSCURO, height: '100%', paddingBottom: 30, shadowColor: '#000', shadowOffset: { width: 6, height: 0 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 20 },
+  overlay:      { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999, flexDirection: 'row' },
+  drawer:       { width: DRAWER_WIDTH, backgroundColor: AZUL_OSCURO, height: '100%', shadowColor: '#000', shadowOffset: { width: 6, height: 0 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 20 },
+  drawerContent: { paddingBottom: 30 },
 
   header:       { backgroundColor: AZUL_MEDIO, paddingTop: 52, paddingBottom: 20, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
   headerFila:   { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
@@ -288,8 +302,8 @@ const styles = StyleSheet.create({
   menuTextoActivo: { color: TEXTO_BLANCO, fontWeight: '700' },
   activoPunto:     { width: 6, height: 6, borderRadius: 3, backgroundColor: VERDE, marginLeft: 'auto' },
 
-  subMenu:     { marginLeft: 46, borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.1)', paddingLeft: 12, marginBottom: 4 },
-  subItem:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
+  subMenu:      { marginLeft: 46, borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.1)', paddingLeft: 12, marginBottom: 4 },
+  subItem:      { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   subItemTexto: { fontSize: 13, color: TEXTO_GRIS },
 
   statsBox:  { flexDirection: 'row', backgroundColor: AZUL_MEDIO, marginHorizontal: 14, marginTop: 18, borderRadius: 16, padding: 16 },

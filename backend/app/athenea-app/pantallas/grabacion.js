@@ -10,19 +10,22 @@ import { Audio } from 'expo-av';
 import CONFIG from '../config';
 import COLORES from '../constantes/colores';
 
-export default function GrabacionScreen({ navigation }) {
+export default function GrabacionScreen({ navigation, route }) {
+  // ─── Paciente preseleccionado desde BuscarPaciente ──────────────────────
+  const pacientePreseleccionado = route?.params?.pacientePreseleccionado || null;
+
   const [grabando,            setGrabando]            = useState(false);
   const [procesando,          setProcesando]          = useState(false);
   const [textoTranscrito,     setTextoTranscrito]     = useState('');
   const [duracion,            setDuracion]            = useState(0);
   const [grabacionFinalizada, setGrabacionFinalizada] = useState(false);
-  const [etapaProceso,        setEtapaProceso]        = useState(''); // 'transcribiendo' | 'estructurando'
+  const [etapaProceso,        setEtapaProceso]        = useState('');
 
   const grabacionRef = useRef(null);
   const intervalRef  = useRef(null);
   const pulsoAnim    = useRef(new Animated.Value(1)).current;
 
-  // ─── Animación de pulso mientras graba ──────────────────────────────────
+  // ─── Animación de pulso ──────────────────────────────────────────────────
   function iniciarPulso() {
     Animated.loop(
       Animated.sequence([
@@ -37,7 +40,7 @@ export default function GrabacionScreen({ navigation }) {
     Animated.timing(pulsoAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
   }
 
-  // ─── Iniciar grabación ──────────────────────────────────────────────────
+  // ─── Iniciar grabación ───────────────────────────────────────────────────
   async function iniciarGrabacion() {
     try {
       const { status } = await Audio.requestPermissionsAsync();
@@ -64,7 +67,7 @@ export default function GrabacionScreen({ navigation }) {
     }
   }
 
-  // ─── Detener y transcribir ──────────────────────────────────────────────
+  // ─── Detener y transcribir ───────────────────────────────────────────────
   async function detenerGrabacion() {
     try {
       clearInterval(intervalRef.current);
@@ -97,7 +100,15 @@ export default function GrabacionScreen({ navigation }) {
         'Athenea sigue despertándose...\n¿Deseas registrar la historia manualmente?',
         [
           { text: 'Cancelar', style: 'cancel' },
-          { text: 'Registro manual', onPress: () => navigation.navigate('Formulario') },
+          {
+            text: 'Registro manual',
+            onPress: () => navigation.navigate('Formulario', {
+              // ← pasa el paciente incluso en fallback manual
+              datosIA: pacientePreseleccionado
+                ? { paciente: pacientePreseleccionado }
+                : undefined,
+            }),
+          },
         ]
       );
     } finally {
@@ -120,14 +131,27 @@ export default function GrabacionScreen({ navigation }) {
 
       if (resp.ok) {
         const datosIA = await resp.json();
+
+        // Si viene paciente preseleccionado y Groq no detectó cédula/nombre, inyectar
+        if (pacientePreseleccionado) {
+          if (!datosIA.paciente)               datosIA.paciente = {};
+          if (!datosIA.paciente.cedula)         datosIA.paciente.cedula   = pacientePreseleccionado.cedula;
+          if (!datosIA.paciente.nombre)         datosIA.paciente.nombre   = pacientePreseleccionado.nombre;
+          if (!datosIA.paciente.telefono)       datosIA.paciente.telefono = pacientePreseleccionado.telefono;
+        }
+
         navigation.navigate('Formulario', { textoIA: textoTranscrito, datosIA });
       } else {
-        // Sin datos de IA pero igualmente navega con el texto
-        navigation.navigate('Formulario', { textoIA: textoTranscrito });
+        navigation.navigate('Formulario', {
+          textoIA: textoTranscrito,
+          datosIA: pacientePreseleccionado ? { paciente: pacientePreseleccionado } : undefined,
+        });
       }
     } catch {
-      // Sin conexión: navega igual, el especialista completa manualmente
-      navigation.navigate('Formulario', { textoIA: textoTranscrito });
+      navigation.navigate('Formulario', {
+        textoIA: textoTranscrito,
+        datosIA: pacientePreseleccionado ? { paciente: pacientePreseleccionado } : undefined,
+      });
     } finally {
       setProcesando(false);
       setEtapaProceso('');
@@ -164,13 +188,28 @@ export default function GrabacionScreen({ navigation }) {
           </TouchableOpacity>
           <View style={styles.headerCentro}>
             <Text style={styles.headerTitulo}>Registro por Voz</Text>
-            <Text style={styles.headerSub}>Athenea voz especialista</Text>
+            {/* Si hay paciente preseleccionado, mostrar su nombre en el sub */}
+            <Text style={styles.headerSub}>
+              {pacientePreseleccionado
+                ? `Paciente: ${pacientePreseleccionado.nombre}`
+                : 'Athenea voz especialista'}
+            </Text>
           </View>
           <View style={{ width: 40 }} />
         </View>
       </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+
+        {/* Banner paciente preseleccionado */}
+        {pacientePreseleccionado && (
+          <View style={styles.bannerPaciente}>
+            <Ionicons name="person-circle-outline" size={18} color={COLORES.primario} />
+            <Text style={styles.bannerPacienteTexto}>
+              C.I. {pacientePreseleccionado.cedula} — {pacientePreseleccionado.nombre}
+            </Text>
+          </View>
+        )}
 
         {/* Área de grabación */}
         <View style={styles.tarjeta}>
@@ -301,6 +340,15 @@ const styles = StyleSheet.create({
   headerTitulo: { fontSize: 18, fontWeight: '700', color: '#fff' },
   headerSub:    { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
 
+  // ── Banner paciente preseleccionado ───────────────────────────────────────
+  bannerPaciente: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: COLORES.secundario,
+    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
+    marginBottom: 12,
+  },
+  bannerPacienteTexto: { fontSize: 14, fontWeight: '600', color: COLORES.oscuro },
+
   scroll: { padding: 16, paddingBottom: 60 },
 
   tarjeta: {
@@ -330,10 +378,10 @@ const styles = StyleSheet.create({
   cargandoCaja:  { alignItems: 'center', gap: 10 },
   cargandoTexto: { color: COLORES.primario, fontSize: 14, fontWeight: '600' },
 
-  btnGrabar:         { borderRadius: 16, overflow: 'hidden', width: '100%' },
-  btnDetener:        {},
+  btnGrabar:          { borderRadius: 16, overflow: 'hidden', width: '100%' },
+  btnDetener:         {},
   btnGrabarGradiente: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
-  btnGrabarTexto:    { color: '#fff', fontSize: 15, fontWeight: '700' },
+  btnGrabarTexto:     { color: '#fff', fontSize: 15, fontWeight: '700' },
 
   resultadoHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', marginBottom: 12 },
   resultadoTitulo: { fontSize: 15, fontWeight: '700', color: COLORES.oscuro },
