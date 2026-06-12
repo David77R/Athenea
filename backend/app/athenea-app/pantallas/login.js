@@ -80,6 +80,8 @@ export default function LoginScreen({ navigation, setToken }) {
           ['nombre',   datos.user?.nombre   || ''],
           ['rol',      datos.user?.rol      || 'optometrist'],
           ['telefono', datos.user?.telefono || ''],
+            ['cedula',   datos.user?.cedula   || ''],
+
         ]);
         setToken(datos.token); // ← el navigator condicional redirige automáticamente
         return;

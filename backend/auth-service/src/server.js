@@ -33,18 +33,19 @@ function verificarToken(req, res, next) {
 
 // ── POST /register ────────────────────────────────────────────────────────────
 app.post("/register", async (req, res) => {
-  const { email, password, nombre = '', telefono = '' } = req.body || {};
+  console.log('registro recibido:', req.body);
+const { email, password, nombre = '', telefono = '', cedula = '' } = req.body || {};
   if (!email || !password)
     return res.status(400).json({ error: "email y password requeridos" });
 
   const passwordHash = await bcrypt.hash(password, 12);
   try {
-    const result = await pool.query(
-      `INSERT INTO users (email, password_hash, role_id, nombre, telefono)
-       VALUES ($1, $2, (SELECT id FROM roles WHERE name = 'optometrist' LIMIT 1), $3, $4)
-       RETURNING id, email, role_id, nombre, telefono, created_at`,
-      [email.toLowerCase(), passwordHash, nombre.trim(), telefono.trim()]
-    );
+  const result = await pool.query(
+  `INSERT INTO users (email, password_hash, role_id, nombre, telefono, cedula)
+   VALUES ($1, $2, (SELECT id FROM roles WHERE name = 'optometrist' LIMIT 1), $3, $4, $5)
+   RETURNING id, email, role_id, nombre, telefono, cedula, created_at`,
+  [email.toLowerCase(), passwordHash, nombre.trim(), telefono.trim(), cedula.trim()]
+);
     const user  = result.rows[0];
     const token = jwt.sign(
       { sub: user.id, email: user.email, role_id: user.role_id },
@@ -53,10 +54,16 @@ app.post("/register", async (req, res) => {
     );
     const redis = await getRedis();
     await redis.setEx(`session:${user.id}`, 60 * 60 * 8, token);
-    return res.status(201).json({
-      token,
-      user: { id: user.id, email: user.email, nombre: user.nombre, telefono: user.telefono },
-    });
+  return res.status(201).json({
+  token,
+  user: { 
+    id:       user.id, 
+    email:    user.email, 
+    nombre:   user.nombre   || '',
+    telefono: user.telefono || '',
+    cedula:   user.cedula   || '',
+  },
+});
   } catch (e) {
     if (e.code === "23505") return res.status(409).json({ error: "email ya registrado" });
     console.error(e);
@@ -98,6 +105,7 @@ app.post("/login", async (req, res) => {
       email:    user.email,
       nombre:   user.nombre   || '',
       telefono: user.telefono || '',
+      cedula: user.cedula     || '',
       rol:      user.rol      || 'optometrist',
     },
   });

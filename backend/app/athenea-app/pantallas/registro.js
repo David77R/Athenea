@@ -10,20 +10,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import CONFIG from '../config';
 import COLORES from '../constantes/colores';
 import { useAlerta } from '../componentes/AlertaPersonalizada';
-// ─── Intento de registro en el servidor ────────────────────────────────────
-async function intentarRegistroServidor(email, password, nombre, telefono) {
+async function intentarRegistroServidor(email, password, nombre, telefono, cedula) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
     const resp = await fetch(`${CONFIG.API_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, nombre }),
+      body: JSON.stringify({ email, password, nombre, telefono, cedula }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
     return resp;
-  } catch {
+  } catch(e) {
+    console.log('ERROR FETCH REGISTRO:', e.message);
     clearTimeout(timeout);
     return null;
   }
@@ -111,8 +111,10 @@ const { mostrar, AlertaPersonalizada } = useAlerta();
     const emailNorm = email.toLowerCase().trim();
 
     try {
-const resp = await intentarRegistroServidor(email, password, nombre, telefono);
-      let token;
+const resp = await intentarRegistroServidor(email, password, nombre, telefono, cedula);
+     console.log('RESPUESTA REGISTRO:', resp?.status, resp?.ok);
+
+let token;
 
       if (resp && resp.ok) {
         // Servidor disponible
