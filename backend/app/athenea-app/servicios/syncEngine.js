@@ -6,7 +6,11 @@ import CONFIG from '../config';
 let intervalo = null;
 let sincronizandoAhora = false;
 
-// ─── Función principal de sincronización ───────────────────────────────────
+/**
+ * Función principal de sincronización de la app
+ */
+
+
 export async function sincronizarPendientes() {
   console.log('INICIANDO SYNC...');
   if (sincronizandoAhora) return { success: false, message: 'Ya sincronizando' };
@@ -107,10 +111,11 @@ function convertirFecha(fechaStr) {
   };
 }
 
-// Alias
+/**
+ * Sincronización con el alias del especialista
+ */
 export const sincronizarAhora = sincronizarPendientes;
 
-// ─── Auto-sync cada 60 segundos ────────────────────────────────────────────
 export function iniciarAutoSync() {
   if (intervalo) return;
   intervalo = setInterval(() => {
@@ -125,7 +130,6 @@ export function detenerAutoSync() {
   }
 }
 
-// ─── Objeto para usar como syncEngine.iniciar() / syncEngine.detener() ────
 export const syncEngine = {
   iniciar: iniciarAutoSync,
   detener: detenerAutoSync,

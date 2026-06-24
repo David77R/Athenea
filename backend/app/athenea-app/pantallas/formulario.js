@@ -323,12 +323,12 @@ export default function FormularioScreen({ route, navigation }) {
         if (resp.ok) guardadoEnNube = true;
       } catch {}
       await guardarHistoriaLocal(id, { ...historia, sincronizado: guardadoEnNube ? 1 : 0 });
-      mostrar({
+   mostrar({
         tipo: 'exito',
         titulo: guardadoEnNube ? '¡Historia guardada!' : '📱 Guardada localmente',
         mensaje: guardadoEnNube
-          ? `La historia de ${nombre} fue guardada y sincronizada exitosamente.`
-          : `La historia de ${nombre} fue guardada en el dispositivo. Se sincronizará al conectarse.`,
+          ? `La historia de ${nombre} fue guardada y sincronizada exitosamente.\n\n⚠️ Precaución: si borra todos los datos desde Ajustes Generales, no podrá recuperar esta información.`
+          : `La historia de ${nombre} fue guardada en el dispositivo. Se sincronizará al conectarse.\n\n⚠️ Precaución: si borra todos los datos desde Ajustes Generales antes de sincronizar, esta información se perderá permanentemente.`,
         icono: guardadoEnNube ? 'cloud-done-outline' : 'phone-portrait-outline',
         boton: guardadoEnNube ? '¡Perfecto!' : 'Entendido',
 onConfirmar: () => navigation.navigate('Home'),

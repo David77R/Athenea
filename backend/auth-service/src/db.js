@@ -23,7 +23,7 @@ async function initSchema() {
       created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     );
   `);
-  // Migración segura: agrega columnas si la tabla ya existe sin ellas
+  
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS nombre   VARCHAR(255) NOT NULL DEFAULT '';`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telefono VARCHAR(64)  NOT NULL DEFAULT '';`);
   await pool.query(`

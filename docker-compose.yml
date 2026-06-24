@@ -32,15 +32,6 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
-# Servicio de historias clinicas para Mongo Atlas
-  mongo:
-    image: mongo:7
-    container_name: athenea-mongo
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
 
   auth-service:
     build:
@@ -67,13 +58,11 @@ services:
     restart: unless-stopped
     depends_on:
       - redis
-      - mongo
     environment:
       NODE_ENV: development
       PORT: 3002
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev_only_change_me_minimum_16chars}
-      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/athenea_clinic}
       CLINICAL_CACHE_TTL_SECONDS: ${CLINICAL_CACHE_TTL_SECONDS:-300}
     ports:
       - "3002:3002"
@@ -107,5 +96,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  mongo_data:
   

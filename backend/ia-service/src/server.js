@@ -15,9 +15,10 @@ const groq   = new Groq({ apiKey: process.env.GROQ_API_KEY });
 app.use(cors());
 app.use(express.json());
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TRANSCRIPCIÓN — ffmpeg → wav → Vosk (no se toca)
-// ─────────────────────────────────────────────────────────────────────────────
+/** 
+ * Primeramente la conversión y transcripción de audio de ffmpg a .wav para que vosk lo procese
+*/
+
 function transcribirAudio(audioPath, modelPath) {
   return new Promise((resolve, reject) => {
     const wavPath = audioPath + ".wav";
@@ -38,9 +39,11 @@ function transcribirAudio(audioPath, modelPath) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CONVERSIÓN TEXTO → NÚMEROS
-// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Funcion para convert los textos a los numeros
+ */
+
 function convertirTextoANumeros(texto) {
   return texto
     .replace(/veintiu?n/g, "21").replace(/veintid[oó]s/g, "22").replace(/veintitr[eé]s/g, "23")
@@ -71,10 +74,10 @@ function convertirTextoANumeros(texto) {
     .replace(/\bdieciocho\b/g, "18").replace(/\bdiecinueve\b/g, "19")
     .replace(/\s+/g, " ").trim();
 }
+/**
+ * Parsers locales por si falla la api de groq para recibir y rellenar los campos
+ */
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PARSERS LOCALES (fallback sin Groq)
-// ─────────────────────────────────────────────────────────────────────────────
 function extraerPaciente(lower) {
   const p = convertirTextoANumeros(lower);
   const matchNombre   = lower.match(/paciente\s+([a-záéíóúñ\s]+?)(?:\s*,|\s+c[eé]dula|\s+ci\b|\s+edad|\s+tel[eé]fono|$)/i);
@@ -173,10 +176,10 @@ function parsearLocal(rawText) {
     _fuente:            "parser_local",
   };
 }
+/**
+ * Prompt de Groq para procesar el audio y rellenar los campos 
+ */
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GROQ — prompt corregido con TODOS los campos
-// ─────────────────────────────────────────────────────────────────────────────
 async function procesarConGroq(rawText) {
   const plantilla = JSON.stringify({
     paciente: {
@@ -290,7 +293,10 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// POST /transcribir — audio → texto (Vosk, sin cambios)
+/**
+ * Transcripcion del audio a texto 
+ */
+
 app.post("/transcribir", upload.single("audio"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No se recibió audio" });
   const audioPath = req.file.path;
@@ -306,7 +312,9 @@ app.post("/transcribir", upload.single("audio"), async (req, res) => {
   }
 });
 
-// POST /structure — texto → datos clínicos estructurados (Groq + fallback local)
+/**
+ * Post del  texto a datos clínicos estructurados, el groq mas el fallback local */
+
 app.post("/structure", async (req, res) => {
   const rawText = String((req.body && req.body.rawText) || "").trim();
   if (!rawText) return res.status(400).json({ error: "rawText requerido" });
@@ -324,7 +332,9 @@ app.post("/structure", async (req, res) => {
   return res.json(parsearLocal(rawText));
 });
 
-// POST /diagnostico — sugerencias por refracción (sin cambios)
+
+// Diagnosticos y sugerencias por refraccion 
+
 app.post("/diagnostico", (req, res) => {
   const { refraccion } = req.body;
   const sugerencias = [];

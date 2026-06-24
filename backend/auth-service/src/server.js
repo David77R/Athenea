@@ -18,7 +18,6 @@ function assertEnv() {
   if (!JWT_SECRET || JWT_SECRET.length < 16) throw new Error("JWT_SECRET inválido");
 }
 
-// ── Middleware verificar token ────────────────────────────────────────────────
 function verificarToken(req, res, next) {
   const header = req.headers.authorization || '';
   const [, token] = header.split(' ');
@@ -31,7 +30,6 @@ function verificarToken(req, res, next) {
   }
 }
 
-// ── POST /register ────────────────────────────────────────────────────────────
 app.post("/register", async (req, res) => {
   console.log('registro recibido:', req.body);
 const { email, password, nombre = '', telefono = '', cedula = '' } = req.body || {};
@@ -53,8 +51,8 @@ const { email, password, nombre = '', telefono = '', cedula = '' } = req.body ||
       { expiresIn: "30d" }
     );
     const redis = await getRedis();
-    await redis.setEx(`session:${user.id}`, 60 * 60 * 8, token);
-  return res.status(201).json({
+await redis.setEx(`session:${user.id}`, 60 * 60 * 24 * 30, token);
+    return res.status(201).json({
   token,
   user: { 
     id:       user.id, 
@@ -71,7 +69,6 @@ const { email, password, nombre = '', telefono = '', cedula = '' } = req.body ||
   }
 });
 
-// ── POST /login ───────────────────────────────────────────────────────────────
 app.post("/login", async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password)
@@ -96,8 +93,7 @@ app.post("/login", async (req, res) => {
     { expiresIn: "30d" }
   );
   const redis = await getRedis();
-  await redis.setEx(`session:${user.id}`, 60 * 60 * 8, token);
-
+await redis.setEx(`session:${user.id}`, 60 * 60 * 24 * 30, token);
   return res.json({
     token,
     user: {
@@ -111,12 +107,10 @@ app.post("/login", async (req, res) => {
   });
 });
 
-// ── GET /me ───────────────────────────────────────────────────────────────────
 app.get("/me", verificarToken, (req, res) => {
   res.json({ user: req.usuario });
 });
 
-// ── GET /perfil ───────────────────────────────────────────────────────────────
 app.get("/perfil", verificarToken, async (req, res) => {
   try {
     const result = await pool.query(
@@ -134,7 +128,6 @@ app.get("/perfil", verificarToken, async (req, res) => {
   }
 });
 
-// ── PUT /perfil ───────────────────────────────────────────────────────────────
 app.put("/perfil", verificarToken, async (req, res) => {
   const { nombre = '', telefono = '' } = req.body || {};
   try {
@@ -150,7 +143,6 @@ app.put("/perfil", verificarToken, async (req, res) => {
   }
 });
 
-// ── GET /health ───────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "ok", service: "auth-service" }));
 
 async function main() {

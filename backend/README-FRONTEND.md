@@ -45,6 +45,6 @@ Para encontrar la IP del backend ejecuta en esa PC:
 npx expo start --clear
 ```
 
-Escanea el QR con **Expo Go** desde tu teléfono. El teléfono debe estar en la misma red WiFi que la PC del backend.
+Escanea el QR con **Expo Go** desde el tlf
 
 ## Estructura de pantallas

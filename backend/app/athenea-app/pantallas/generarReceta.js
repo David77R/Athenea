@@ -8,11 +8,20 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 import COLORES from '../constantes/colores';
 import { useAlerta } from '../componentes/AlertaPersonalizada';
 
 const OD = '#1565C0';
 const OI = '#C62828';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 function filaTabla(label, od, oi) {
   if (!od && !oi) return '';
@@ -214,8 +223,16 @@ export default function GenerarRecetaScreen({ route, navigation }) {
   const [especialista, setEspecialista] = useState({});
 
   const { mostrar, AlertaPersonalizada } = useAlerta();
+useEffect(() => {
+    async function pedirPermisoNotificaciones() {
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== 'granted') {
+          await Notifications.requestPermissionsAsync();
+        }
+      } catch {}
+    }
 
-  useEffect(() => {
     async function cargarEspecialista() {
       try {
         const raw = await AsyncStorage.getItem('perfil_especialista');
@@ -228,6 +245,8 @@ export default function GenerarRecetaScreen({ route, navigation }) {
         }
       } catch {}
     }
+
+    pedirPermisoNotificaciones();
     cargarEspecialista();
   }, []);
 /**
@@ -283,12 +302,21 @@ export default function GenerarRecetaScreen({ route, navigation }) {
   const fecha       = paciente?.fechaConsulta || new Date().toLocaleDateString('es-ES');
   const nroHistoria = paciente?.nroHistoria   || `HC-${Date.now()}`;
 
-  async function generarPDF() {
+async function generarPDF() {
     setGenerando(true);
     try {
       const html    = generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, fecha, nroHistoria });
       const { uri } = await Print.printToFileAsync({ html, base64: false });
       setGenerando(false);
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '📄 Receta generada',
+          body: `La receta de ${paciente?.nombre || 'paciente'} se generó correctamente.`,
+        },
+        trigger: null,
+      });
+
       setCompartiendo(true);
       await Sharing.shareAsync(uri, {
         mimeType:    'application/pdf',
