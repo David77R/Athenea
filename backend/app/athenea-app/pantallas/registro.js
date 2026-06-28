@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, ScrollView, Platform, StatusBar,
-  KeyboardAvoidingView, Alert
+  KeyboardAvoidingView, Alert, Linking
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -105,6 +105,24 @@ const { mostrar, AlertaPersonalizada } = useAlerta();
     return Object.keys(e).length === 0;
   }
 
+  // Alert mostrado cuando el registro fue exitoso EN SERVIDOR: la cuenta no
+  // puede usarse todavía porque falta confirmar el correo. No se guarda
+  // sesión ni se navega a la app — el usuario debe volver a Login después
+  // de confirmar desde su correo.
+  function mostrarAlertaVerificacion(correoDestino) {
+    mostrar({
+      tipo: 'exito',
+      titulo: 'Confirma tu correo',
+      mensaje: `Te enviamos un correo de confirmación a ${correoDestino}. Por favor confirma tu cuenta antes de iniciar sesión.`,
+      icono: 'mail-outline',
+      boton: 'Entendido',
+      onConfirmar: () => {
+        Linking.openURL('https://mail.google.com').catch(() => {});
+        navigation.navigate('Login');
+      },
+    });
+  }
+
   async function handleRegistro() {
     if (!validar()) return;
     setCargando(true);
@@ -114,12 +132,14 @@ const { mostrar, AlertaPersonalizada } = useAlerta();
 const resp = await intentarRegistroServidor(email, password, nombre, telefono, cedula);
      console.log('RESPUESTA REGISTRO:', resp?.status, resp?.ok);
 
-let token;
-
       if (resp && resp.ok) {
-        // Servidor disponible
-        const datos = await resp.json();
-        token = datos.token;
+        // Servidor disponible: el registro NO devuelve token. La cuenta
+        // queda creada pero sin verificar; el usuario debe confirmar su
+        // correo antes de poder iniciar sesión.
+        let datos = {};
+        try { datos = await resp.json(); } catch {}
+        mostrarAlertaVerificacion(datos.email || emailNorm);
+        return;
      } else if (resp && !resp.ok) {
   let msg = 'Error al registrar';
   try { const d = await resp.json(); msg = d.error || msg; } catch {}
@@ -132,7 +152,7 @@ let token;
       icono: 'person-circle-outline',
       botonCancelar: 'Cancelar',
       botonConfirmar: 'Iniciar sesión',
-onConfirmar: () => navigation.navigate('Home'),
+onConfirmar: () => navigation.navigate('Login'),
     });
     return;
   }
@@ -140,31 +160,32 @@ onConfirmar: () => navigation.navigate('Home'),
   setErrores({ general: msg });
   return;
 } else {
-  // Sin servidor → registro local
+  // Sin servidor → registro local. Aquí sí se entra directo a la app,
+  // ya que no hay backend disponible para exigir verificación de correo.
   const local = await registrarLocal(emailNorm, password, nombre);
   if (!local.ok) { setErrores({ general: local.error || 'Error local' }); return; }
-  token = local.token;
+
+  await AsyncStorage.setItem('token', local.token);
+  await AsyncStorage.setItem('nombre', nombre);
+  await AsyncStorage.setItem('email', emailNorm);
+  await AsyncStorage.setItem('telefono', telefono);
+  await AsyncStorage.setItem('cedula', cedula);
+  await AsyncStorage.setItem('perfil_especialista', JSON.stringify({
+    nombre, cedula, email: emailNorm, telefono,
+  }));
+
+  setToken(local.token);
+  mostrar({
+    tipo: 'exito',
+    titulo: '¡Bienvenido a Athenea!',
+    mensaje: `Hola ${nombre}, tu cuenta fue creada exitosamente (modo local, sin conexión al servidor).`,
+    boton: 'Comenzar',
+    onConfirmar: () => {},
+    icono: 'eye-outline'
+  });
+  return;
 }
 
-
-      await AsyncStorage.setItem('token', token);
-      await AsyncStorage.setItem('nombre', nombre);
-      await AsyncStorage.setItem('email', emailNorm);
-      await AsyncStorage.setItem('telefono', telefono);
-      await AsyncStorage.setItem('cedula', cedula);
-      await AsyncStorage.setItem('perfil_especialista', JSON.stringify({
-        nombre, cedula, email: emailNorm, telefono,
-      }));
-
-    setToken(token);
-mostrar({
-  tipo: 'exito',
-  titulo: '¡Bienvenido a Athenea!',
-  mensaje: `Hola ${nombre}, tu cuenta fue creada exitosamente.`,
-  boton: 'Comenzar',
-  onConfirmar: () => {},
-  icono: 'eye-outline'
-});
 } catch (e) {
   console.log('ERROR REGISTRO:', e.message, e);
   setErrores({ general: 'Error inesperado. Intenta de nuevo.' });

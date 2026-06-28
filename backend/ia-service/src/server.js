@@ -176,6 +176,9 @@ function parsearLocal(rawText) {
     _fuente:            "parser_local",
   };
 }
+
+/=========================================================================================/
+
 /**
  * Prompt de Groq para procesar el audio y rellenar los campos 
  */
@@ -222,6 +225,11 @@ async function procesarConGroq(rawText) {
       od: "resultado visión de color OD (Normal/Alterada) o string vacío",
       oi: "resultado visión de color OI (Normal/Alterada) o string vacío",
     },
+    tonometria:          "hallazgo de tonometría con tonómetro, ej '12 mmHg AO', o string vacío",
+    lensometria:         "refracción hallada y/o patologías/defectos refractivos vistos con lensómetro, o string vacío",
+    autorrefractometria: "defectos visuales detectados digitalmente con autorrefractómetro, o string vacío",
+    oftalmoscopio:       "hallazgos del fondo de ojo vistos con oftalmoscopio, o 'No aplica' si se menciona explícitamente que no aplica, o string vacío",
+    derivacion:          "recomendación de derivar a especialista si se menciona, o string vacío",
     diagnosisPreliminary: "diagnóstico preliminar o string vacío",
     observations: "observaciones generales o string vacío",
   }, null, 2);
@@ -256,9 +264,24 @@ SEPARACIÓN DE CAMPOS — MUY IMPORTANTE:
 - "tipoLentes" es el tipo de lentes que usa actualmente. Ej: "monofocales".
 - NO metas tiempoEvolucion ni antecedentes dentro de motivo.
 
+EXAMEN ESPECIALIZADO — MUY IMPORTANTE (instrumentos y momento de evaluación distintos al examen básico):
+- "tonometria" es ÚNICAMENTE el valor numérico medido con el tonómetro, en mmHg. Ej: "tonometría doce milímetros de mercurio ambos ojos" → "12 mmHg AO". NO confundir con "intraocularPressure", que es la PIO del examen básico tomada con otro método; si el dictado distingue explícitamente "tonometría" de "PIO" o "presión intraocular", cada dato va en su campo correspondiente y no se duplica en el otro.
+- "lensometria" es lo hallado con el lensómetro: nueva refracción detectada y/o patologías o defectos refractivos observados con ese instrumento. NO mezclar con los valores de "refraccion" (esf_od, cil_od, etc.), que vienen del examen de refracción estándar.
+- "autorrefractometria" es ÚNICAMENTE lo detectado de forma digital/automática con el autorrefractómetro (posibles defectos visuales). Si el dictado no distingue claramente autorrefractómetro de refracción manual, prioriza dejarlo vacío antes que adivinar.
+- "oftalmoscopio" son los hallazgos del fondo de ojo vistos con ese instrumento específico, o "No aplica" si el especialista lo dice explícitamente. No mezclar con observaciones generales.
+- "derivacion" es SOLO la recomendación de derivar al paciente a otro especialista (ej. "derivar a oftalmólogo por sospecha de catarata"). No es un diagnóstico ni una observación general; va aquí únicamente cuando el dictado indica explícitamente una derivación o referencia a otro profesional.
+- Si el dictado no menciona tonometría, lensometría, autorrefractometría u oftalmoscopio en absoluto (porque esa consulta no incluyó esos instrumentos), deja esos campos como string vacío — NO repitas ahí datos de PIO, refracción o biomicroscopía del examen básico.
+
 DIAGNÓSTICO:
 - "diagnosisPreliminary" debe ser solo el nombre de la condición, SIN agregar "(preliminar)" ni ningún sufijo.
 - Ej: "presbicia con hipermetropía leve" NO "presbicia con hipermetropía leve (preliminar)".
+
+OBSERVACIONES — IMPORTANTE, SÉ EXHAUSTIVO:
+- "observations" debe capturar TODO comentario clínico relevante del dictado que no tenga un campo propio más específico: recomendaciones generales de cuidado visual, indicaciones de seguimiento o control, hallazgos adicionales que el especialista mencione "de paso" o al final del dictado, contexto relevante sobre el estilo de vida del paciente (uso de pantallas, trabajo, lectura) si se conecta con el cuadro clínico, y cualquier matiz o advertencia que el especialista haga sobre el caso.
+- Redacta "observations" en frases completas y profesionales, como las escribiría el propio especialista en una historia clínica — no como una lista de palabras sueltas ni como un fragmento cortado a la mitad.
+- Si el dictado menciona varios comentarios sueltos a lo largo de la grabación que no encajan en otro campo, ÚNELOS en "observations" en un solo bloque coherente, en el orden en que tenga más sentido clínico, no necesariamente el orden en que se dictaron.
+- NO dejes "observations" vacío si el dictado contiene cualquier comentario clínico adicional, aunque sea breve; solo déjalo vacío si el dictado no tiene absolutamente ningún comentario que no encaje ya en otro campo.
+- NO repitas en "observations" información que ya quedó completa en otro campo (motivo, diagnóstico, antecedentes, examen especializado, etc.) — su función es complementar, no duplicar.
 
 Devuelve exactamente esta estructura JSON:
 ${plantilla}`,

@@ -21,6 +21,19 @@ const historiaSchema = new mongoose.Schema({
         ojo_izquierdo: { esferico: Number, cilindrico: Number, eje: Number },
     },
 
+    presion_intraocular: {
+        ojo_derecho: { type: Number },
+        ojo_izquierdo: { type: Number },
+    },
+
+    examen_especializado: {
+        tonometria: { type: String },
+        lensometria: { type: String },
+        autorrefractometria: { type: String },
+        oftalmoscopio: { type: String },
+        derivacion: { type: String },
+    },
+
     diagnostico: { type: String},
     tratamiento: { type: String},
     observaciones: { type: String },

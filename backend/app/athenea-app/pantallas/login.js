@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
-  ScrollView, StatusBar
+  ScrollView, StatusBar, Linking
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CONFIG from '../config';
 import COLORES from '../constantes/colores';
+import { useAlerta } from '../componentes/AlertaPersonalizada';
 
 // ─── Intento de login contra el servidor ───────────────────────────────────
 async function intentarLoginServidor(email, password) {
@@ -52,6 +53,8 @@ export default function LoginScreen({ navigation, setToken }) {
   const [verPass,      setVerPass]      = useState(false);
   const [modoOffline,  setModoOffline]  = useState('');
 
+  const { mostrar, AlertaPersonalizada } = useAlerta();
+
   function validar() {
     const e = {};
     if (!credencial) e.credencial = 'El usuario o correo es obligatorio';
@@ -59,6 +62,34 @@ export default function LoginScreen({ navigation, setToken }) {
     else if (password.length < 6) e.password = 'Mínimo 6 caracteres';
     setErrores(e);
     return Object.keys(e).length === 0;
+  }
+
+  // Email no verificado (403): alert con mensaje del backend + botón para abrir Gmail.
+  function mostrarAlertaNoVerificado(mensajeBackend) {
+    mostrar({
+      tipo: 'error',
+      titulo: 'Confirma tu correo',
+      mensaje: mensajeBackend || 'Debes confirmar tu correo electrónico antes de iniciar sesión.',
+      icono: 'mail-outline',
+      boton: 'Abrir Gmail',
+      onConfirmar: () => {
+        Linking.openURL('https://mail.google.com').catch(() => {});
+      },
+    });
+  }
+
+  // Bloqueo temporal por intentos fallidos (429): alert con minutos restantes.
+  function mostrarAlertaBloqueo(minutosRestantes) {
+    mostrar({
+      tipo: 'error',
+      titulo: 'Cuenta bloqueada temporalmente',
+      mensaje: minutosRestantes
+        ? `Demasiados intentos fallidos. Intenta de nuevo en ${minutosRestantes} minuto(s).`
+        : 'Demasiados intentos fallidos. Intenta de nuevo más tarde.',
+      icono: 'lock-closed-outline',
+      boton: 'Entendido',
+      onConfirmar: () => {},
+    });
   }
 
   async function handleLogin() {
@@ -87,10 +118,30 @@ export default function LoginScreen({ navigation, setToken }) {
         return;
       }
 
-      // ── Servidor responde con error (credenciales malas) ──
+      // ── Servidor responde con error ──
       if (resp && !resp.ok) {
-        let msg = 'Credenciales inválidas';
-        try { const d = await resp.json(); msg = d.error || msg; } catch {}
+        let d = {};
+        try { d = await resp.json(); } catch {}
+
+        // Email no verificado (Fase 4b)
+        if (resp.status === 403) {
+          mostrarAlertaNoVerificado(d.mensaje);
+          return;
+        }
+
+        // Bloqueo temporal por intentos fallidos (Fase 4a)
+        if (resp.status === 429) {
+          mostrarAlertaBloqueo(d.minutosRestantes);
+          return;
+        }
+
+        // Credenciales inválidas (401) u otro error — comportamiento original,
+        // mostrando además los intentos restantes si el backend los envía,
+        // para avisar al usuario antes de que llegue al bloqueo.
+        let msg = d.error || 'Credenciales inválidas';
+        if (typeof d.intentosRestantes === 'number') {
+          msg += ` (te quedan ${d.intentosRestantes} intento${d.intentosRestantes === 1 ? '' : 's'} antes del bloqueo temporal)`;
+        }
         setErrores({ general: msg });
         return;
       }
@@ -219,6 +270,7 @@ export default function LoginScreen({ navigation, setToken }) {
           </View>
         </ScrollView>
       </LinearGradient>
+      <AlertaPersonalizada />
     </KeyboardAvoidingView>
   );
 }

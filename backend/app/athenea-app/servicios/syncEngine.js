@@ -13,12 +13,13 @@ let sincronizandoAhora = false;
 
 export async function sincronizarPendientes() {
   console.log('INICIANDO SYNC...');
-  if (sincronizandoAhora) return { success: false, message: 'Ya sincronizando' };
+  if (sincronizandoAhora) return { success: false, message: 'Sincronizando ahora' };
   const estado = await NetInfo.fetch();
   if (!estado.isConnected) {
     return { success: false, message: 'Sin conexión a internet' };
   }
 
+   
   const pendientes = await obtenerHistoriasPendientes();
   if (pendientes.length === 0) {
     return { success: true, message: 'Todo al día', subidos: 0 };

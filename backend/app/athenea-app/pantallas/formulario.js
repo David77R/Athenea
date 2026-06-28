@@ -14,7 +14,7 @@ import CONFIG from '../config';
 import COLORES from '../constantes/colores';
 import { useAlerta } from '../componentes/AlertaPersonalizada';
 
-const PASOS    = ['Paciente', 'Anamnesis', 'Examen', 'Diagnóstico'];
+const PASOS    = ['Paciente', 'Anamnesis', 'Examen', 'Especializado', 'Diagnóstico'];
 const TURQUESA = '#0B7B8B';
 const OSCURO   = '#0D3B44';
 const FONDO    = '#EEF4F6';
@@ -30,7 +30,6 @@ function capitalizeWords(str) {
   return str.split(' ').map(w => w.length === 0 ? '' : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
-// ── Convierte "DD/MM/AAAA" a objeto Date ──────────────────────────────────
 function parsearFecha(str) {
   if (!str) return null;
   const partes = str.split('/');
@@ -99,7 +98,6 @@ function BannerIA({ texto }) {
   );
 }
 
-// ── Modal flotante con el texto dictado ───────────────────────────────────
 function ModalTextoIA({ textoIA, visible, onCerrar }) {
   if (!textoIA) return null;
   return (
@@ -129,7 +127,6 @@ export default function FormularioScreen({ route, navigation }) {
   const [pasoActual,   setPasoActual]   = useState(0);
   const [verTextoIA,   setVerTextoIA]   = useState(false);
 
-  // Paso 1
   const [nombre,       setNombre]       = useState('');
   const [cedula,       setCedula]       = useState('');
   const [cedulaPrefix, setCedulaPrefix] = useState('V');
@@ -142,7 +139,6 @@ export default function FormularioScreen({ route, navigation }) {
   const [nroHistoria]  = useState(`HC-${Date.now()}`);
   const fechaConsulta  = new Date().toLocaleDateString('es-ES');
 
-  // Paso 2
   const [motivo,            setMotivo]       = useState('');
   const [tiempoEvolucion,   setTiempoEvo]    = useState('');
   const [antOcularPersonal, setAntOcPer]     = useState('');
@@ -152,7 +148,6 @@ export default function FormularioScreen({ route, navigation }) {
   const [tipoLentes,        setTipoLentes]   = useState('');
   const [medicamentos,      setMedicamentos] = useState('');
 
-  // Paso 3
   const [avscOD,       setAvscOD]       = useState('');
   const [avscOI,       setAvscOI]       = useState('');
   const [avccOD,       setAvccOD]       = useState('');
@@ -173,17 +168,20 @@ export default function FormularioScreen({ route, navigation }) {
   const [fondoOjoOD,   setFondoOjoOD]   = useState('');
   const [fondoOjoOI,   setFondoOjoOI]   = useState('');
 
-  // Paso 4
+  const [tonometria,          setTonometria]          = useState('');
+  const [lensometria,         setLensometria]         = useState('');
+  const [autorrefractometria, setAutorrefractometria] = useState('');
+  const [oftalmoscopio,       setOftalmoscopio]       = useState('');
+  const [derivacion,          setDerivacion]          = useState('');
+
   const [diagPrincipal,  setDiagPrincipal]  = useState('');
   const [prescripcion,   setPrescripcion]   = useState('');
   const [proximaCita,    setProximaCita]    = useState('');
   const [observaciones,  setObservaciones]  = useState('');
 
-  // ── Mapeo de datos IA ────────────────────────────────────────────────────
   useEffect(() => {
     if (!datosIA) return;
 
-    // Paciente
     if (datosIA.paciente?.nombre)    setNombre(capitalizeWords(datosIA.paciente.nombre));
     if (datosIA.paciente?.cedula) {
       const ced = String(datosIA.paciente.cedula).toUpperCase();
@@ -191,14 +189,12 @@ export default function FormularioScreen({ route, navigation }) {
       else { setCedulaPrefix('V'); setCedula(ced); }
     }
 
-    // ── FECHA: sincronizar tanto el string como el objeto Date ──────────
     if (datosIA.paciente?.fechaNac) {
       const f = datosIA.paciente.fechaNac;
       setFechaNac(f);
       const fecha = parsearFecha(f);
       if (fecha) {
         setFechaObj(fecha);
-        // Calcular edad automáticamente
         const hoy = new Date();
         let e = hoy.getFullYear() - fecha.getFullYear();
         const m = hoy.getMonth() - fecha.getMonth();
@@ -211,7 +207,6 @@ export default function FormularioScreen({ route, navigation }) {
     if (datosIA.paciente?.telefono)  setTelefono(String(datosIA.paciente.telefono));
     if (datosIA.paciente?.ocupacion) setOcupacion(capitalizeWords(datosIA.paciente.ocupacion));
 
-    // Anamnesis
     if (datosIA.motivo)             setMotivo(datosIA.motivo);
     if (datosIA.tiempoEvolucion)    setTiempoEvo(datosIA.tiempoEvolucion);
     if (datosIA.antOcularPersonal)  setAntOcPer(datosIA.antOcularPersonal);
@@ -221,13 +216,11 @@ export default function FormularioScreen({ route, navigation }) {
     if (datosIA.tipoLentes)         setTipoLentes(datosIA.tipoLentes);
     if (datosIA.medicamentos)       setMedicamentos(datosIA.medicamentos);
 
-    // Agudeza visual
     if (datosIA.visualAcuity?.od)   setAvscOD(datosIA.visualAcuity.od);
     if (datosIA.visualAcuity?.oi)   setAvscOI(datosIA.visualAcuity.oi);
     if (datosIA.visualAcuity?.ccOD) setAvccOD(datosIA.visualAcuity.ccOD);
     if (datosIA.visualAcuity?.ccOI) setAvccOI(datosIA.visualAcuity.ccOI);
 
-    // ── REFRACCIÓN: usar != null en vez de if (valor) para no perder 0 y negativos ──
     const ref = datosIA.refraccion;
     if (ref) {
       if (ref.esf_od != null && ref.esf_od !== '') setEsfOD(String(ref.esf_od));
@@ -240,7 +233,6 @@ export default function FormularioScreen({ route, navigation }) {
       if (ref.add_oi != null && ref.add_oi !== '') setAddOI(String(ref.add_oi));
     }
 
-    // PIO
     const pio = datosIA.intraocularPressure;
     if (pio) {
       if (pio.od != null && pio.od !== '') setPioOD(String(pio.od));
@@ -249,6 +241,13 @@ export default function FormularioScreen({ route, navigation }) {
 
     if (datosIA.ishihara?.od)          setIshaOD(datosIA.ishihara.od);
     if (datosIA.ishihara?.oi)          setIshaOI(datosIA.ishihara.oi);
+
+    if (datosIA.tonometria)          setTonometria(datosIA.tonometria);
+    if (datosIA.lensometria)         setLensometria(datosIA.lensometria);
+    if (datosIA.autorrefractometria) setAutorrefractometria(datosIA.autorrefractometria);
+    if (datosIA.oftalmoscopio)       setOftalmoscopio(datosIA.oftalmoscopio);
+    if (datosIA.derivacion)          setDerivacion(datosIA.derivacion);
+
     if (datosIA.diagnosisPreliminary)  setDiagPrincipal(datosIA.diagnosisPreliminary);
     if (datosIA.observations)          setObservaciones(datosIA.observations);
   }, [datosIA]);
@@ -279,7 +278,7 @@ export default function FormularioScreen({ route, navigation }) {
       case 1:
         if (!motivo.trim()) { Alert.alert('Error', 'El motivo de consulta es obligatorio.'); return false; }
         return true;
-      case 3:
+      case 4:
         if (!diagPrincipal.trim()) { Alert.alert('Error', 'El diagnóstico principal es obligatorio.'); return false; }
         return true;
       default: return true;
@@ -294,10 +293,11 @@ export default function FormularioScreen({ route, navigation }) {
 
   async function guardar() {
     const historia = {
-      paciente:    { nombre: capitalizeWords(nombre), cedula: `${cedulaPrefix}${cedula}`, fechaNac, edad, telefono, ocupacion, fechaConsulta, nroHistoria },
-      anamnesis:   { motivo, tiempoEvolucion, antOcularPersonal, antOcularFamiliar, antMedicos, usaLentes, tipoLentes, medicamentos },
-      examen:      { avscOD, avscOI, avccOD, avccOI, esfOD, esfOI, cilOD, cilOI, ejeOD, ejeOI, addOD, addOI, pioOD, pioOI, ishaOD, ishaOI, biomicroscopia, fondoOjoOD, fondoOjoOI },
-      diagnostico: { diagPrincipal, prescripcion, proximaCita, observaciones },
+      paciente:      { nombre: capitalizeWords(nombre), cedula: `${cedulaPrefix}${cedula}`, fechaNac, edad, telefono, ocupacion, fechaConsulta, nroHistoria },
+      anamnesis:     { motivo, tiempoEvolucion, antOcularPersonal, antOcularFamiliar, antMedicos, usaLentes, tipoLentes, medicamentos },
+      examen:        { avscOD, avscOI, avccOD, avccOI, esfOD, esfOI, cilOD, cilOI, ejeOD, ejeOI, addOD, addOI, pioOD, pioOI, ishaOD, ishaOI, biomicroscopia, fondoOjoOD, fondoOjoOI },
+      especializado: { tonometria, lensometria, autorrefractometria, oftalmoscopio, derivacion },
+      diagnostico:   { diagPrincipal, prescripcion, proximaCita, observaciones },
     };
     const id = `HC-${Date.now()}`;
     try {
@@ -317,6 +317,7 @@ export default function FormularioScreen({ route, navigation }) {
               ojo_izquierdo: { esferico: parseFloat(esfOI)||0, cilindrico: parseFloat(cilOI)||0, eje: parseFloat(ejeOI)||0, adicion: parseFloat(addOI)||0 },
             },
             presion_intraocular: { ojo_derecho: parseFloat(pioOD)||0, ojo_izquierdo: parseFloat(pioOI)||0 },
+            examen_especializado: { tonometria, lensometria, autorrefractometria, oftalmoscopio, derivacion },
             diagnostico: diagPrincipal || '', tratamiento: prescripcion || '', observaciones: observaciones || '',
           }),
         });
@@ -496,6 +497,57 @@ onConfirmar: () => navigation.navigate('Home'),
       case 3:
         return (
           <View style={styles.pasoContainer}>
+            <BannerIA texto={datosIA?.tonometria || datosIA?.lensometria ? 'Examen especializado pre-rellenado por Athenea IA · Verifica' : null} />
+
+            <Campo
+              label="TONOMETRÍA"
+              value={tonometria}
+              onChange={setTonometria}
+              placeholder="Ej: 12 mmHg AO"
+              resaltado={!!datosIA?.tonometria}
+            />
+
+            <Campo
+              label="LENSOMETRÍA"
+              value={lensometria}
+              onChange={setLensometria}
+              placeholder="Refracción hallada, patologías o defectos refractivos"
+              multiline
+              resaltado={!!datosIA?.lensometria}
+            />
+
+            <Campo
+              label="AUTORREFRACTOMETRÍA"
+              value={autorrefractometria}
+              onChange={setAutorrefractometria}
+              placeholder="Defectos visuales detectados digitalmente"
+              multiline
+              resaltado={!!datosIA?.autorrefractometria}
+            />
+
+            <Campo
+              label="OFTALMOSCOPIO"
+              value={oftalmoscopio}
+              onChange={setOftalmoscopio}
+              placeholder="Hallazgos del fondo de ojo, o 'No aplica'"
+              multiline
+              resaltado={!!datosIA?.oftalmoscopio}
+            />
+
+            <Campo
+              label="DERIVACIÓN / RECOMENDACIÓN"
+              value={derivacion}
+              onChange={setDerivacion}
+              placeholder="Ej: Derivar a oftalmólogo por sospecha de catarata"
+              multiline
+              resaltado={!!datosIA?.derivacion}
+            />
+          </View>
+        );
+
+      case 4:
+        return (
+          <View style={styles.pasoContainer}>
             <View style={styles.badgeEspecialista}>
               <Ionicons name="lock-closed" size={14} color="#E65100" />
               <Text style={styles.badgeTexto}>Sección exclusiva del especialista · La IA no interviene en el diagnóstico</Text>
@@ -526,7 +578,7 @@ onConfirmar: () => navigation.navigate('Home'),
           </TouchableOpacity>
           <View style={styles.headerCentro}>
             <Text style={styles.headerTitulo}>
-              <Text style={styles.headerNum}>{pasoActual + 1}/4 </Text>
+              <Text style={styles.headerNum}>{pasoActual + 1}/{PASOS.length} </Text>
               {PASOS[pasoActual]}
             </Text>
             <Text style={styles.headerSub}>Formulario de Historia Clínica</Text>
@@ -576,13 +628,11 @@ onConfirmar: () => navigation.navigate('Home'),
         </TouchableOpacity>
       </View>
 
-      {/* Botón flotante de texto IA — visible si hay texto dictado */}
- {textoIA ? (
-  <TouchableOpacity style={styles.botonFlotante} onPress={() => setVerTextoIA(true)} activeOpacity={0.85}>
-    <Ionicons name="document-text-outline" size={22} color="#fff" />
-  </TouchableOpacity>
-) : null}
-      {/* Modal con texto dictado */}
+      {textoIA ? (
+        <TouchableOpacity style={styles.botonFlotante} onPress={() => setVerTextoIA(true)} activeOpacity={0.85}>
+          <Ionicons name="document-text-outline" size={22} color="#fff" />
+        </TouchableOpacity>
+      ) : null}
       <ModalTextoIA textoIA={textoIA} visible={verTextoIA} onCerrar={() => setVerTextoIA(false)} />
 
       <AlertaPersonalizada />
@@ -600,15 +650,15 @@ const styles = StyleSheet.create({
   headerSub:    { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
 
   wizard:            { flexDirection: 'row', alignItems: 'center' },
-  wizardPaso:        { alignItems: 'center' },
-  wizardCirculo:     { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', backgroundColor: 'transparent' },
+  wizardPaso:        { alignItems: 'center', flex: 1 },
+  wizardCirculo:     { width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', backgroundColor: 'transparent' },
   wizardListo:       { backgroundColor: VERDE, borderColor: VERDE },
   wizardActivo:      { backgroundColor: '#fff', borderColor: '#fff' },
-  wizardNum:         { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.6)' },
-  wizardLabel:       { fontSize: 9, color: 'rgba(255,255,255,0.5)', marginTop: 3, textAlign: 'center' },
+  wizardNum:         { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.6)' },
+  wizardLabel:       { fontSize: 8, color: 'rgba(255,255,255,0.5)', marginTop: 3, textAlign: 'center' },
   wizardLabelActivo: { color: '#fff', fontWeight: '700' },
   wizardLabelListo:  { color: 'rgba(255,255,255,0.8)' },
-  wizardLinea:       { flex: 1, height: 2, backgroundColor: 'rgba(255,255,255,0.2)', marginBottom: 12 },
+  wizardLinea:       { flex: 0.5, height: 2, backgroundColor: 'rgba(255,255,255,0.2)', marginBottom: 14 },
   wizardLineaActiva: { backgroundColor: VERDE },
 
   scrollContent: { padding: 16, paddingTop: 20 },
@@ -666,20 +716,18 @@ const styles = StyleSheet.create({
   btnGuardar:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, backgroundColor: VERDE, borderRadius: 14, gap: 6 },
   btnSiguienteTexto: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  // ── Botón flotante texto IA ───────────────────────────────────────────────
- botonFlotante: {
-  position: 'absolute',
-  right: 0,
-  top: '50%',
-  marginTop: -24,
-  width: 48, height: 48, borderRadius: 24,
-  borderTopRightRadius: 0, borderBottomRightRadius: 0,
-  backgroundColor: TURQUESA,
-  justifyContent: 'center', alignItems: 'center',
-  elevation: 8, shadowColor: TURQUESA, shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: -2, height: 0 },
-},
+  botonFlotante: {
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    marginTop: -24,
+    width: 48, height: 48, borderRadius: 24,
+    borderTopRightRadius: 0, borderBottomRightRadius: 0,
+    backgroundColor: TURQUESA,
+    justifyContent: 'center', alignItems: 'center',
+    elevation: 8, shadowColor: TURQUESA, shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: -2, height: 0 },
+  },
 
-  // ── Modal texto IA ────────────────────────────────────────────────────────
   modalOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContenido:  { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '60%' },
   modalHeader:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },

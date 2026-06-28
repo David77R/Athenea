@@ -1,27 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Platform, StatusBar
+  ActivityIndicator, Platform, StatusBar, Vibration, Linking
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import COLORES from '../constantes/colores';
 import { useAlerta } from '../componentes/AlertaPersonalizada';
 
 const OD = '#1565C0';
 const OI = '#C62828';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
 
 function filaTabla(label, od, oi) {
   if (!od && !oi) return '';
@@ -33,7 +24,7 @@ function filaTabla(label, od, oi) {
     </tr>`;
 }
 
-function generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, fecha, nroHistoria }) {
+function generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, especializado, fecha, nroHistoria }) {
   return `
 <!DOCTYPE html>
 <html lang="es">
@@ -92,6 +83,8 @@ function generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, f
     .dx-texto { font-size: 13px; color: #0D3B44; line-height: 1.5; }
     .presc-box { background: #FFF8E1; border-radius: 8px; padding: 12px; border-left: 3px solid #FF8F00; }
     .presc-label { font-size: 9px; font-weight: 700; color: #FF8F00; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .deriv-box { background: #FDF3E8; border-radius: 8px; padding: 12px; border-left: 3px solid #E65100; }
+    .deriv-label { font-size: 9px; font-weight: 700; color: #E65100; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
 
     .footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid #C8E6EA; display: flex; justify-content: space-between; align-items: flex-end; }
     .firma-area { text-align: center; }
@@ -176,7 +169,6 @@ function generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, f
         ${filaTabla('Cilíndrico', examen.cilOD, examen.cilOI)}
         ${filaTabla('Eje',        examen.ejeOD ? examen.ejeOD + '°' : '', examen.ejeOI ? examen.ejeOI + '°' : '')}
         ${filaTabla('Adición',    examen.addOD, examen.addOI)}
-        ${filaTabla('PIO',        examen.pioOD ? examen.pioOD + ' mmHg' : '', examen.pioOI ? examen.pioOI + ' mmHg' : '')}
       </tbody>
     </table>
   </div>` : ''}
@@ -196,6 +188,15 @@ function generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, f
     ${diagnostico?.proximaCita ? `<div style="margin-top:10px; font-size:12px; color:#547D8A;"><strong>Próxima cita:</strong> ${diagnostico.proximaCita}</div>` : ''}
     ${diagnostico?.observaciones ? `<div style="margin-top:8px; font-size:12px; color:#547D8A;"><strong>Observaciones:</strong> ${diagnostico.observaciones}</div>` : ''}
   </div>
+
+  ${especializado?.derivacion ? `
+  <div class="seccion">
+    <div class="seccion-titulo">Derivación</div>
+    <div class="deriv-box">
+      <div class="deriv-label">Recomendación</div>
+      <div class="dx-texto">${especializado.derivacion}</div>
+    </div>
+  </div>` : ''}
 
   <div class="footer">
     <div class="firma-area">
@@ -220,19 +221,13 @@ export default function GenerarRecetaScreen({ route, navigation }) {
   const { historia } = route.params || {};
   const [generando,    setGenerando]    = useState(false);
   const [compartiendo, setCompartiendo] = useState(false);
+  const [guardando,    setGuardando]    = useState(false);
+  const [enviando,     setEnviando]     = useState(false);
   const [especialista, setEspecialista] = useState({});
 
   const { mostrar, AlertaPersonalizada } = useAlerta();
-useEffect(() => {
-    async function pedirPermisoNotificaciones() {
-      try {
-        const { status } = await Notifications.getPermissionsAsync();
-        if (status !== 'granted') {
-          await Notifications.requestPermissionsAsync();
-        }
-      } catch {}
-    }
 
+  useEffect(() => {
     async function cargarEspecialista() {
       try {
         const raw = await AsyncStorage.getItem('perfil_especialista');
@@ -245,14 +240,12 @@ useEffect(() => {
         }
       } catch {}
     }
-
-    pedirPermisoNotificaciones();
     cargarEspecialista();
   }, []);
-/**
- * Sin historia
- */
 
+  /**
+   * Sin historia
+   */
   if (!historia) {
     return (
       <View style={styles.raiz}>
@@ -298,24 +291,19 @@ useEffect(() => {
     );
   }
 
-  const { paciente, anamnesis, examen, diagnostico } = historia;
+  const { paciente, anamnesis, examen, diagnostico, especializado } = historia;
   const fecha       = paciente?.fechaConsulta || new Date().toLocaleDateString('es-ES');
   const nroHistoria = paciente?.nroHistoria   || `HC-${Date.now()}`;
 
-async function generarPDF() {
+  async function generarPDF() {
     setGenerando(true);
     try {
-      const html    = generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, fecha, nroHistoria });
+      const html    = generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, especializado, fecha, nroHistoria });
       const { uri } = await Print.printToFileAsync({ html, base64: false });
       setGenerando(false);
 
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '📄 Receta generada',
-          body: `La receta de ${paciente?.nombre || 'paciente'} se generó correctamente.`,
-        },
-        trigger: null,
-      });
+      // Confirmación física de que el PDF se generó correctamente
+      Vibration.vibrate(200);
 
       setCompartiendo(true);
       await Sharing.shareAsync(uri, {
@@ -340,7 +328,7 @@ async function generarPDF() {
   async function imprimirDirecto() {
     setGenerando(true);
     try {
-      const html = generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, fecha, nroHistoria });
+      const html = generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, especializado, fecha, nroHistoria });
       await Print.printAsync({ html });
     } catch {
       mostrar({
@@ -355,7 +343,115 @@ async function generarPDF() {
     }
   }
 
+  /**
+   * Guardar en dispositivo: genera el PDF y abre el panel de compartir nativo,
+   * que en ambas plataformas ofrece la opción de guardar en archivos/Descargas.
+   * Se distingue del botón "Generar y compartir" solo por el texto del diálogo,
+   * tal como se decidió, para no duplicar lógica de permisos por plataforma.
+   */
+  async function guardarEnDispositivo() {
+    setGuardando(true);
+    try {
+      const html    = generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, especializado, fecha, nroHistoria });
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+
+      Vibration.vibrate(200);
+
+      await Sharing.shareAsync(uri, {
+        mimeType:    'application/pdf',
+        dialogTitle: `Guardar receta — ${paciente?.nombre || 'Paciente'}`,
+        UTI:         'com.adobe.pdf',
+      });
+    } catch {
+      mostrar({
+        tipo:   'error',
+        titulo: 'Error al guardar PDF',
+        mensaje: 'No se pudo generar el PDF para guardar. Intente de nuevo.',
+        icono:  'alert-circle-outline',
+        boton:  'Entendido',
+      });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  /**
+   * Enviar al paciente por WhatsApp.
+   * IMPORTANTE: WhatsApp no permite adjuntar archivo + texto prellenado
+   * automáticamente para apps de terceros. Este flujo abre WhatsApp con el
+   * mensaje listo y luego avisa al usuario que debe adjuntar el PDF manualmente
+   * (decisión tomada explícitamente para esta fase).
+   */
+  async function enviarAlPaciente() {
+    const telefono = (paciente?.telefono || '').replace(/[^\d]/g, '');
+    if (!telefono) {
+      mostrar({
+        tipo:   'error',
+        titulo: 'Sin número de teléfono',
+        mensaje: 'Esta historia no tiene un número de teléfono registrado para el paciente.',
+        icono:  'call-outline',
+        boton:  'Entendido',
+      });
+      return;
+    }
+
+    setEnviando(true);
+    try {
+      // Genera el PDF primero para que esté listo cuando el usuario vuelva a adjuntarlo
+      const html = generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, especializado, fecha, nroHistoria });
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+
+      // Normaliza el número a formato internacional simple (Venezuela: 0XXX -> 58XXX)
+      const numeroWhatsapp = telefono.startsWith('0') ? `58${telefono.slice(1)}` : telefono;
+
+      const mensaje = `Buenas tardes ${paciente?.nombre || ''}, su receta óptica ya está lista. En unos segundos le adjuntaré el PDF con todos los detalles.`;
+      const url = `whatsapp://send?phone=${numeroWhatsapp}&text=${encodeURIComponent(mensaje)}`;
+
+      const puedeAbrir = await Linking.canOpenURL(url);
+      if (!puedeAbrir) {
+        mostrar({
+          tipo:   'error',
+          titulo: 'WhatsApp no disponible',
+          mensaje: 'No se encontró WhatsApp instalado en este dispositivo.',
+          icono:  'logo-whatsapp',
+          boton:  'Entendido',
+        });
+        return;
+      }
+
+      Vibration.vibrate(200);
+      await Linking.openURL(url);
+
+      // Aviso para adjuntar el PDF manualmente al volver a la conversación
+      mostrar({
+        tipo:   'exito',
+        titulo: 'Ahora adjunta el PDF',
+        mensaje: 'WhatsApp se abrió con el mensaje listo. Para enviar la receta, toca el clip 📎 dentro del chat y selecciona el PDF que se generó (puedes encontrarlo también con el botón "Guardar en dispositivo").',
+        icono:  'attach-outline',
+        boton:  'Entendido',
+      });
+
+      // Deja el PDF disponible para que el usuario lo adjunte si lo necesita
+      await Sharing.shareAsync(uri, {
+        mimeType:    'application/pdf',
+        dialogTitle: `Adjuntar receta — ${paciente?.nombre || 'Paciente'}`,
+        UTI:         'com.adobe.pdf',
+      }).catch(() => {});
+    } catch {
+      mostrar({
+        tipo:   'error',
+        titulo: 'Error al enviar',
+        mensaje: 'No se pudo completar el envío al paciente. Intente de nuevo.',
+        icono:  'alert-circle-outline',
+        boton:  'Entendido',
+      });
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   const paddingTop = Platform.OS === 'android' ? 48 : 60;
+  const algunaAccionEnCurso = generando || compartiendo || guardando || enviando;
 
   return (
     <View style={styles.raiz}>
@@ -434,15 +530,21 @@ async function generarPDF() {
             </SeccionPreview>
           )}
 
+          {especializado?.derivacion && (
+            <SeccionPreview titulo="Derivación">
+              <Text style={styles.diagTexto}>{especializado.derivacion}</Text>
+            </SeccionPreview>
+          )}
+
           <View style={styles.previewSep} />
           <Text style={styles.previewFirma}>— {especialista.nombre || 'Especialista'} · Optometrista</Text>
         </View>
 
         {/* Botones */}
         <TouchableOpacity
-          style={[styles.btnPDF, (generando || compartiendo) && { opacity: 0.7 }]}
+          style={[styles.btnPDF, algunaAccionEnCurso && { opacity: 0.7 }]}
           onPress={generarPDF}
-          disabled={generando || compartiendo}
+          disabled={algunaAccionEnCurso}
         >
           <LinearGradient
             colors={[COLORES.primario, COLORES.gradienteFin]}
@@ -459,9 +561,35 @@ async function generarPDF() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.btnImprimir, generando && { opacity: 0.7 }]}
+          style={[styles.btnWhatsapp, algunaAccionEnCurso && { opacity: 0.7 }]}
+          onPress={enviarAlPaciente}
+          disabled={algunaAccionEnCurso}
+        >
+          {enviando
+            ? <ActivityIndicator color="#fff" />
+            : <>
+                <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+                <Text style={styles.btnTexto}>Enviar al paciente</Text>
+              </>}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.btnImprimir, algunaAccionEnCurso && { opacity: 0.7 }]}
+          onPress={guardarEnDispositivo}
+          disabled={algunaAccionEnCurso}
+        >
+          {guardando
+            ? <ActivityIndicator color={COLORES.primario} />
+            : <>
+                <Ionicons name="download-outline" size={18} color={COLORES.primario} />
+                <Text style={styles.btnImprimirTexto}>Guardar en dispositivo</Text>
+              </>}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.btnImprimir, algunaAccionEnCurso && { opacity: 0.7 }]}
           onPress={imprimirDirecto}
-          disabled={generando}
+          disabled={algunaAccionEnCurso}
         >
           <Ionicons name="print-outline" size={18} color={COLORES.primario} />
           <Text style={styles.btnImprimirTexto}>Imprimir directamente</Text>
@@ -501,7 +629,7 @@ const styles = StyleSheet.create({
   headerTitulo: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: '#fff' },
 
   /**
-   * Sin historias 
+   * Sin historias
    */
   sinHistoriaCont:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   sinHistoriaIcono: { width: 90, height: 90, borderRadius: 45, backgroundColor: COLORES.secundario, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
@@ -540,6 +668,7 @@ const styles = StyleSheet.create({
   btnPDF:      { borderRadius: 16, overflow: 'hidden', marginBottom: 12 },
   btnGrad:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16 },
   btnTexto:    { color: '#fff', fontSize: 16, fontWeight: '700' },
-  btnImprimir: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: COLORES.primario, borderRadius: 16, paddingVertical: 14 },
+  btnWhatsapp: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#25D366', borderRadius: 16, paddingVertical: 16, marginBottom: 12 },
+  btnImprimir: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: COLORES.primario, borderRadius: 16, paddingVertical: 14, marginBottom: 12 },
   btnImprimirTexto: { color: COLORES.primario, fontWeight: '700', fontSize: 15 },
 });
