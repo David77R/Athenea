@@ -1,14 +1,7 @@
-﻿# Orquestación maestra Athenea: PostgreSQL (auth), MongoDB (clínica), Redis (caché/colas),
-# microservicios y gateway Nginx.
-#
-# Uso rápido:
-#   1) cp .env.example .env  (ajusta MONGODB_URI si usas Atlas)
+﻿#   1) cp .env.example .env  (ajusta MONGODB_URI si usas Atlas)
 #   2) docker compose up --build
 #   API: http://localhost:8080/api/auth/health
 #
-# Atlas: en .env pon MONGODB_URI=mongodb+srv://... y comenta o elimina la dependencia
-# de `mongo` en clinical-service si solo usas Atlas.
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -48,6 +41,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-athenea}:${POSTGRES_PASSWORD:-athenea_dev}@postgres:5432/${POSTGRES_DB:-athenea_db}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev_only_change_me_minimum_16chars}
+      GMAIL_USER: ${GMAIL_USER}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD}
+      AUTH_SERVICE_PUBLIC_URL: ${AUTH_SERVICE_PUBLIC_URL:-http://localhost:8080/api/auth}
     ports:
       - "3001:3001"
 
@@ -96,4 +92,3 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  

@@ -41,10 +41,38 @@ function parsearFecha(str) {
   return fecha;
 }
 
-function Campo({ label, value, onChange, placeholder, keyboardType = 'default', multiline = false, editable = true, resaltado = false, error = '' }) {
+// Formatea el texto crudo de Vosk para que se vea mas ordenado en el modal.
+// Detecta palabras clave clinicas y agrega saltos de linea antes de ellas,
+// de forma que el especialista pueda leer el dictado sección por sección
+// sin que sea un bloque de texto amontonado.
+function formatearTextoVosk(texto) {
+  if (!texto) return '';
+  const MARCADORES = [
+    'motivo', 'tiempo de evolucion', 'antecedentes', 'usa lentes', 'lentes',
+    'medicamentos', 'agudeza visual', 'refraccion', 'esferico', 'cilindrico',
+    'presion intraocular', 'pio', 'tonometria', 'lensometria', 'autorrefractometria',
+    'oftalmoscopio', 'derivacion', 'diagnostico', 'observacion', 'ishihara',
+    'biomicroscopia', 'fondo de ojo', 'prescripcion', 'proxima cita',
+  ];
+  const regex = new RegExp(`(${MARCADORES.join('|')})`, 'gi');
+  return texto.replace(regex, '\n$1').trim();
+}
+
+function Campo({ label, value, onChange, placeholder, keyboardType = 'default', multiline = false, editable = true, resaltado = false, error = '', botonNoAplica }) {
   return (
     <View style={styles.campo}>
-      <Text style={styles.campoLabel}>{label}</Text>
+      <View style={styles.campoLabelFila}>
+        <Text style={styles.campoLabel}>{label}</Text>
+        {botonNoAplica && (
+          <TouchableOpacity
+            style={styles.btnNoAplica}
+            onPress={botonNoAplica}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.btnNoAplicaTexto}>No aplica</Text>
+          </TouchableOpacity>
+        )}
+      </View>
       <TextInput
         style={[styles.input, multiline && styles.inputMulti, !editable && styles.inputDesactivado, resaltado && styles.inputResaltado, !!error && styles.inputError]}
         placeholder={placeholder}
@@ -112,7 +140,7 @@ function ModalTextoIA({ textoIA, visible, onCerrar }) {
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-            <Text style={styles.modalTexto}>{textoIA}</Text>
+            <Text style={styles.modalTexto}>{formatearTextoVosk(textoIA)}</Text>
           </ScrollView>
         </View>
       </View>
@@ -216,10 +244,16 @@ export default function FormularioScreen({ route, navigation }) {
     if (datosIA.tipoLentes)         setTipoLentes(datosIA.tipoLentes);
     if (datosIA.medicamentos)       setMedicamentos(datosIA.medicamentos);
 
-    if (datosIA.visualAcuity?.od)   setAvscOD(datosIA.visualAcuity.od);
-    if (datosIA.visualAcuity?.oi)   setAvscOI(datosIA.visualAcuity.oi);
-    if (datosIA.visualAcuity?.ccOD) setAvccOD(datosIA.visualAcuity.ccOD);
-    if (datosIA.visualAcuity?.ccOI) setAvccOI(datosIA.visualAcuity.ccOI);
+    // Agudeza visual: se asigna siempre que el campo no sea null/undefined,
+    // incluso si es string vacio, para evitar el bug donde el OI no se
+    // renderizaba por la condicion if (truthy) siendo demasiado restrictiva.
+    const av = datosIA.visualAcuity;
+    if (av) {
+      if (av.od  != null) setAvscOD(String(av.od));
+      if (av.oi  != null) setAvscOI(String(av.oi));
+      if (av.ccOD != null) setAvccOD(String(av.ccOD));
+      if (av.ccOI != null) setAvccOI(String(av.ccOI));
+    }
 
     const ref = datosIA.refraccion;
     if (ref) {
@@ -324,7 +358,7 @@ export default function FormularioScreen({ route, navigation }) {
         if (resp.ok) guardadoEnNube = true;
       } catch {}
       await guardarHistoriaLocal(id, { ...historia, sincronizado: guardadoEnNube ? 1 : 0 });
-   mostrar({
+      mostrar({
         tipo: 'exito',
         titulo: guardadoEnNube ? '¡Historia guardada!' : '📱 Guardada localmente',
         mensaje: guardadoEnNube
@@ -332,7 +366,7 @@ export default function FormularioScreen({ route, navigation }) {
           : `La historia de ${nombre} fue guardada en el dispositivo. Se sincronizará al conectarse.\n\n⚠️ Precaución: si borra todos los datos desde Ajustes Generales antes de sincronizar, esta información se perderá permanentemente.`,
         icono: guardadoEnNube ? 'cloud-done-outline' : 'phone-portrait-outline',
         boton: guardadoEnNube ? '¡Perfecto!' : 'Entendido',
-onConfirmar: () => navigation.navigate('Home'),
+        onConfirmar: () => navigation.navigate('Home'),
       });
     } catch {
       Alert.alert('Error', 'No se pudo guardar la historia clínica.');
@@ -386,9 +420,20 @@ onConfirmar: () => navigation.navigate('Home'),
       case 1:
         return (
           <View style={styles.pasoContainer}>
-            <BannerIA texto={datosIA?.motivo ? 'Anamnesis pre-rellenada por Athenea IA · Verifica' : null} />
+            <BannerIA texto={datosIA?.motivo ? 'Anamnesis pre-rellenada por Athenea IA · Por favor verifique' : null} />
             <Campo label="MOTIVO DE CONSULTA *" value={motivo} onChange={setMotivo} placeholder="Describe el motivo de la visita" multiline resaltado={!!datosIA?.motivo} />
             <Campo label="TIEMPO DE EVOLUCIÓN" value={tiempoEvolucion} onChange={setTiempoEvo} placeholder="Cuánto tiempo lleva con el problema" resaltado={!!datosIA?.tiempoEvolucion} />
+
+            {/* Boton unico para marcar los 3 antecedentes como No aplica */}
+            <TouchableOpacity
+              style={styles.btnNoAplicaTodos}
+              onPress={() => { setAntOcPer('No aplica'); setAntOcFam('No aplica'); setAntMed('No aplica'); }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="checkmark-circle-outline" size={15} color={TURQUESA} />
+              <Text style={styles.btnNoAplicaTodosTexto}>Marcar todos los antecedentes como "No aplica"</Text>
+            </TouchableOpacity>
+
             <Campo label="ANTECEDENTES OCULARES PERSONALES" value={antOcularPersonal} onChange={setAntOcPer} placeholder="Enfermedades oculares, cirugías, traumas" multiline />
             <Campo label="ANTECEDENTES OCULARES FAMILIARES" value={antOcularFamiliar} onChange={setAntOcFam} placeholder="Glaucoma, catarata, estrabismo en la familia" multiline />
             <Campo label="ANTECEDENTES MÉDICOS GENERALES" value={antMedicos} onChange={setAntMed} placeholder="Diabetes, hipertensión, alergias" multiline />
@@ -404,7 +449,7 @@ onConfirmar: () => navigation.navigate('Home'),
       case 2:
         return (
           <View style={styles.pasoContainer}>
-            <BannerIA texto={datosIA?.visualAcuity?.od ? 'Examen pre-rellenado por Athenea IA · Verifica' : null} />
+            <BannerIA texto={datosIA?.visualAcuity?.od ? 'Examen pre-rellenado por Athenea IA · Por favor verifique' : null} />
 
             <Text style={styles.subtituloSeccion}>AGUDEZA VISUAL SIN CORRECCIÓN (AVSC)</Text>
             <View style={styles.filaOjos}>
@@ -497,7 +542,7 @@ onConfirmar: () => navigation.navigate('Home'),
       case 3:
         return (
           <View style={styles.pasoContainer}>
-            <BannerIA texto={datosIA?.tonometria || datosIA?.lensometria ? 'Examen especializado pre-rellenado por Athenea IA · Verifica' : null} />
+            <BannerIA texto={datosIA?.tonometria || datosIA?.lensometria ? 'Examen especializado pre-rellenado por Athenea IA · Por favor verifique' : null} />
 
             <Campo
               label="TONOMETRÍA"
@@ -550,7 +595,7 @@ onConfirmar: () => navigation.navigate('Home'),
           <View style={styles.pasoContainer}>
             <View style={styles.badgeEspecialista}>
               <Ionicons name="lock-closed" size={14} color="#E65100" />
-              <Text style={styles.badgeTexto}>Sección exclusiva del especialista · La IA no interviene en el diagnóstico</Text>
+              <Text style={styles.badgeTexto}>Sección exclusiva del especialista · Rellene según sus criterios</Text>
             </View>
             <Campo label="DIAGNÓSTICO PRINCIPAL *" value={diagPrincipal} onChange={setDiagPrincipal} placeholder="Ej: Miopía simple" multiline />
             <Campo label="PRESCRIPCIÓN DE LENTES" value={prescripcion} onChange={setPrescripcion} placeholder="Ej: Lentes monofocales, protección UV" multiline />
@@ -668,8 +713,16 @@ const styles = StyleSheet.create({
   bannerIA:      { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORES.secundario, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16 },
   bannerIATexto: { fontSize: 13, fontWeight: '600', color: TURQUESA, flex: 1 },
 
-  campo:      { marginBottom: 14 },
-  campoLabel: { fontSize: 10, fontWeight: '700', color: LABEL_COL, letterSpacing: 0.8, marginBottom: 6, textTransform: 'uppercase' },
+  campo:         { marginBottom: 14 },
+  campoLabelFila:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  campoLabel:    { fontSize: 10, fontWeight: '700', color: LABEL_COL, letterSpacing: 0.8, textTransform: 'uppercase' },
+
+  btnNoAplica:       { backgroundColor: '#EAF7F8', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: BORDE },
+  btnNoAplicaTexto:  { fontSize: 10, color: TURQUESA, fontWeight: '600' },
+
+  btnNoAplicaTodos:      { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#EAF7F8', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 14, borderWidth: 1, borderColor: BORDE },
+  btnNoAplicaTodosTexto: { fontSize: 12, color: TURQUESA, fontWeight: '600', flex: 1 },
+
   input:      { backgroundColor: INPUT_BG, borderWidth: 1.5, borderColor: BORDE, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: OSCURO },
   inputMulti: { height: 80, textAlignVertical: 'top' },
   inputDesactivado: { backgroundColor: '#E8F0F2', color: '#8AAAB5' },
@@ -734,5 +787,5 @@ const styles = StyleSheet.create({
   modalTitulo:     { flex: 1, fontSize: 15, fontWeight: '700', color: OSCURO },
   modalCerrar:     { padding: 4 },
   modalScroll:     { maxHeight: 300 },
-  modalTexto:      { fontSize: 14, color: '#547D8A', lineHeight: 22, fontStyle: 'italic' },
+  modalTexto:      { fontSize: 14, color: '#547D8A', lineHeight: 24, fontStyle: 'italic' },
 });

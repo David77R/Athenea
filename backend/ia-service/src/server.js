@@ -189,15 +189,15 @@ async function procesarConGroq(rawText) {
       nombre: "nombre completo del paciente o string vacío",
       cedula: "número de cédula solo dígitos o string vacío",
       edad:   "edad en años como string o string vacío",
-         fechaNac:  "fecha de nacimiento en formato DD/MM/AAAA o string vacío",
+      fechaNac:  "fecha de nacimiento en formato DD/MM/AAAA o string vacío",
       telefono: "teléfono solo dígitos o string vacío",
       ocupacion: "profesión u oficio o string vacío",
     },
     motivo:            "motivo de consulta o string vacío",
     tiempoEvolucion:   "tiempo de evolución del problema o string vacío",
-    antOcularPersonal: "antecedentes oculares personales o string vacío",
-    antOcularFamiliar: "antecedentes oculares familiares o string vacío",
-    antMedicos:        "antecedentes médicos generales o string vacío",
+    antOcularPersonal: "antecedentes oculares personales, o 'No aplica' si el dictado indica que no tiene, o string vacío si no se menciona",
+    antOcularFamiliar: "antecedentes oculares familiares, o 'No aplica' si el dictado indica que no tiene, o string vacío si no se menciona",
+    antMedicos:        "antecedentes médicos generales, o 'No aplica' si el dictado indica que no tiene o son normales, o string vacío si no se menciona",
     usaLentes:         false,
     tipoLentes:        "tipo de lentes o string vacío",
     medicamentos:      "medicamentos actuales o string vacío",
@@ -248,7 +248,7 @@ REGLAS CRÍTICAS:
 
 CONVERSIÓN DE NÚMEROS:
 - Convierte TODOS los números en palabras a dígitos.
-- Teléfonos: "cero cuatro ciento veinticuatro cinco seis siete ocho nueve cero" → "04124567890". Procesa dígito por dígito después del prefijo.
+- Teléfonos venezolanos: tienen EXACTAMENTE 11 dígitos (ej: 04141234567). Procesa cada palabra como un dígito individual de izquierda a derecha hasta completar los 11 dígitos. Ejemplo: "cero cuatro uno cuatro uno dos tres cuatro cinco seis siete" → "04141234567" (11 dígitos, no te detengas antes del último).
 - Cédulas venezolanas: 7-8 dígitos. "dieciséis cuatro tres dos uno ocho" → "16432108". Solo dígitos, sin letras.
 - Agudeza visual: "veinte treinta" → "20/30", "veinte veinte" → "20/20".
 - Refracción: "más uno punto veinticinco" → "+1.25", "menos cero punto cincuenta" → "-0.50", "ciento ochenta" → "180".
@@ -257,9 +257,9 @@ CONVERSIÓN DE NÚMEROS:
 SEPARACIÓN DE CAMPOS — MUY IMPORTANTE:
 - "motivo" es SOLO el síntoma principal en una frase corta. Ej: "visión borrosa de cerca y cansancio visual al leer".
 - "tiempoEvolucion" es el tiempo que lleva con el problema. Ej: "seis meses" → "6 meses".
-- "antOcularPersonal" son antecedentes oculares personales (cirugías, enfermedades oculares previas).
-- "antOcularFamiliar" son antecedentes familiares oculares (glaucoma, catarata en familia).
-- "antMedicos" son enfermedades generales (diabetes, hipertensión, alergias). Ej: "hipertensión controlada".
+- "antOcularPersonal" son antecedentes oculares personales (cirugías, enfermedades oculares previas). Si el dictado dice explícitamente que NO tiene ("no tiene antecedentes", "ninguno", "sin antecedentes"), pon "No aplica". Solo deja vacío si no se menciona en absoluto.
+- "antOcularFamiliar" son antecedentes familiares oculares. Misma regla: "No aplica" si se niegan explícitamente, vacío si no se mencionan.
+- "antMedicos" son enfermedades generales (diabetes, hipertensión, alergias). Misma regla: "No aplica" si el dictado dice "ninguno", "sano", "sin antecedentes médicos" o similar.
 - "usaLentes" es true si menciona que usa lentes actualmente.
 - "tipoLentes" es el tipo de lentes que usa actualmente. Ej: "monofocales".
 - NO metas tiempoEvolucion ni antecedentes dentro de motivo.
@@ -299,7 +299,7 @@ ${plantilla}`,
   const contenido = completion.choices[0]?.message?.content || "{}";
   const limpio    = contenido.replace(/```json|```/g, "").trim();
   const datos     = JSON.parse(limpio);
-    datos.paciente.nombre = datos.paciente.nombre.charAt(0).toUpperCase() + datos.paciente.nombre.slice(1).toLowerCase();
+  datos.paciente.nombre = datos.paciente.nombre.charAt(0).toUpperCase() + datos.paciente.nombre.slice(1).toLowerCase();
 
   return { ...datos, narrative: rawText, _fuente: "groq" };
 }
@@ -336,8 +336,8 @@ app.post("/transcribir", upload.single("audio"), async (req, res) => {
 });
 
 /**
- * Post del  texto a datos clínicos estructurados, el groq mas el fallback local */
-
+ * Post del texto a datos clínicos estructurados, el groq mas el fallback local
+ */
 app.post("/structure", async (req, res) => {
   const rawText = String((req.body && req.body.rawText) || "").trim();
   if (!rawText) return res.status(400).json({ error: "rawText requerido" });

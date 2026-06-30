@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, Platform, StatusBar, Dimensions
@@ -9,26 +9,30 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DrawerMenu from '../componentes/drawerMenu';
-import { obtenerTodasLasHistorias, obtenerHistoriasPendientes } from '../baseDatosLite/basedatoslt';
+import {
+  obtenerTodasLasHistorias,
+  obtenerHistoriasPendientes,
+  marcarComoSincronizada,
+} from '../baseDatosLite/basedatoslt';
+import CONFIG from '../config';
 import COLORES from '../constantes/colores';
 import { useAlerta } from '../componentes/AlertaPersonalizada';
+
 const { width } = Dimensions.get('window');
 
 // ── Días de la semana empezando en Lunes ──────────────────────────────────
 const DIAS_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
 function getDiaIndex(fecha) {
-  // getDay() devuelve 0=Dom,1=Lun...6=Sáb → convertimos a 0=Lun..6=Dom
   const d = fecha.getDay();
   return d === 0 ? 6 : d - 1;
 }
 
 function actividadSemana(historias) {
-  // Devuelve array [L,M,X,J,V,S,D] con conteo de historias de esta semana
   const hoy        = new Date();
-  const diaHoyIdx  = getDiaIndex(hoy);                     // 0=Lun..6=Dom
+  const diaHoyIdx  = getDiaIndex(hoy);
   const inicioSem  = new Date(hoy);
-  inicioSem.setDate(hoy.getDate() - diaHoyIdx);            // Lunes de esta semana
+  inicioSem.setDate(hoy.getDate() - diaHoyIdx);
   inicioSem.setHours(0, 0, 0, 0);
 
   const dias = [0, 0, 0, 0, 0, 0, 0];
@@ -59,9 +63,119 @@ function formatearFechaHoy() {
   return `${dias[hoy.getDay()]}, ${hoy.getDate()} de ${meses[hoy.getMonth()]}`;
 }
 
+// ── Sincronización: sube historias pendientes al clinical-service ──────────
+async function sincronizarAhora() {
+  try {
+    const token      = await AsyncStorage.getItem('token');
+    const email      = await AsyncStorage.getItem('email') || '';
+    const pendientes = await obtenerHistoriasPendientes();
+
+    if (pendientes.length === 0) {
+      return { success: true, message: 'No hay historias pendientes de sincronizar.' };
+    }
+
+    let subidas  = 0;
+    let fallidas = 0;
+
+    for (const fila of pendientes) {
+      try {
+        const historia = JSON.parse(fila.datos);
+        const { paciente, anamnesis, examen, especializado, diagnostico } = historia;
+
+        const resp = await fetch(`${CONFIG.CLINICAL_URL}/historias`, {
+          method:  'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization:  `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            especialista_email:   email,
+            paciente: {
+              nombre:          paciente?.nombre          || '',
+              cedula:          paciente?.cedula          || '',
+              fecha_nacimiento: paciente?.fechaNac       || null,
+              telefono:        paciente?.telefono        || '',
+            },
+            motivo_consulta:      anamnesis?.motivo      || '',
+            agudeza_visual: {
+              ojo_derecho:   examen?.avscOD || '',
+              ojo_izquierdo: examen?.avscOI || '',
+            },
+            refraccion: {
+              ojo_derecho:   {
+                esferico:   parseFloat(examen?.esfOD) || 0,
+                cilindrico: parseFloat(examen?.cilOD) || 0,
+                eje:        parseFloat(examen?.ejeOD) || 0,
+                adicion:    parseFloat(examen?.addOD) || 0,
+              },
+              ojo_izquierdo: {
+                esferico:   parseFloat(examen?.esfOI) || 0,
+                cilindrico: parseFloat(examen?.cilOI) || 0,
+                eje:        parseFloat(examen?.ejeOI) || 0,
+                adicion:    parseFloat(examen?.addOI) || 0,
+              },
+            },
+            presion_intraocular: {
+              ojo_derecho:   parseFloat(examen?.pioOD) || 0,
+              ojo_izquierdo: parseFloat(examen?.pioOI) || 0,
+            },
+            examen_especializado: {
+              tonometria:          especializado?.tonometria          || '',
+              lensometria:         especializado?.lensometria         || '',
+              autorrefractometria: especializado?.autorrefractometria || '',
+              oftalmoscopio:       especializado?.oftalmoscopio       || '',
+              derivacion:          especializado?.derivacion          || '',
+            },
+            diagnostico:   diagnostico?.diagPrincipal || '',
+            tratamiento:   diagnostico?.prescripcion  || '',
+            observaciones: diagnostico?.observaciones || '',
+          }),
+        });
+
+        if (resp.ok) {
+          await marcarComoSincronizada(fila.id);
+          subidas++;
+        } else {
+          fallidas++;
+        }
+      } catch {
+        fallidas++;
+      }
+    }
+
+    const ahora = new Date().toLocaleString('es-ES', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    await AsyncStorage.setItem('ultima_sincronizacion', ahora);
+
+    if (fallidas === 0) {
+      return {
+        success: true,
+        message: `${subidas} historia(s) sincronizada(s) correctamente.`,
+      };
+    } else if (subidas > 0) {
+      return {
+        success: false,
+        message: `${subidas} sincronizadas, ${fallidas} fallaron. Intenta de nuevo más tarde.`,
+      };
+    } else {
+      return {
+        success: false,
+        message: `No se pudo sincronizar. Verifica tu conexión e intenta de nuevo.`,
+      };
+    }
+  } catch {
+    return {
+      success: false,
+      message: 'Error inesperado al sincronizar. Verifica tu conexión.',
+    };
+  }
+}
+
 export default function HomeScreen({ navigation, setToken }) {
   const insets = useSafeAreaInsets();
-const { mostrar, AlertaPersonalizada } = useAlerta();
+  const { mostrar, AlertaPersonalizada } = useAlerta();
   const [nombreUsuario,  setNombreUsuario]  = useState('');
   const [email,          setEmail]          = useState('');
   const [drawerVisible,  setDrawerVisible]  = useState(false);
@@ -69,18 +183,41 @@ const { mostrar, AlertaPersonalizada } = useAlerta();
   const [stats,          setStats]          = useState({ pacientes: 0, hoy: 0, pendientes: 0, ultimaSync: '' });
   const [semana,         setSemana]         = useState([0, 0, 0, 0, 0, 0, 0]);
   const [ultimaConsulta, setUltimaConsulta] = useState(null);
+  const [sincronizando,  setSincronizando]  = useState(false);
 
- useEffect(() => { cargarDatos(); }, []);
-console.log ('USE EJECUTADO');
-useFocusEffect(
-  useCallback(() => { cargarDatos(); }, [])
-);
+  // Ref para el timer de sincronización automática
+  const timerSync = useRef(null);
+
+  useEffect(() => {
+    cargarDatos();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      cargarDatos();
+    }, [])
+  );
+
+  // Timer de sincronización automática cada 60 segundos.
+  // Solo corre si hay pendientes, para no hacer requests innecesarios.
+  useEffect(() => {
+    timerSync.current = setInterval(async () => {
+      const pendientes = await obtenerHistoriasPendientes();
+      if (pendientes.length > 0) {
+        await sincronizarAhora();
+        await cargarDatos();
+      }
+    }, 60 * 1000);
+
+    return () => {
+      if (timerSync.current) clearInterval(timerSync.current);
+    };
+  }, []);
 
   async function cargarDatos() {
     const n = await AsyncStorage.getItem('nombre');
     const e = await AsyncStorage.getItem('email');
     const s = await AsyncStorage.getItem('ultima_sincronizacion');
-      console.log('NOMBRE:', n, 'EMAIL:', e);
 
     if (n) setNombreUsuario(n);
     if (e) setEmail(e);
@@ -114,10 +251,28 @@ useFocusEffect(
     }
   }
 
+  async function handleSincronizar() {
+    if (sincronizando) return;
+    setSincronizando(true);
+    try {
+      const resultado = await sincronizarAhora();
+      await cargarDatos();
+      mostrar({
+        tipo:    resultado.success ? 'exito' : 'error',
+        titulo:  resultado.success ? '¡Sincronizado!' : 'Error al sincronizar',
+        mensaje: resultado.message,
+        icono:   resultado.success ? 'cloud-done-outline' : 'cloud-offline-outline',
+        boton:   'Entendido',
+      });
+    } finally {
+      setSincronizando(false);
+    }
+  }
+
   const paddingTop   = Platform.OS === 'android' ? 48 : 10;
   const maxSemana    = Math.max(...semana, 1);
   const inicial      = nombreUsuario ? nombreUsuario.charAt(0).toUpperCase() : 'A';
-  const diaHoyIdx    = getDiaIndex(new Date());   // índice del día actual en el array
+  const diaHoyIdx    = getDiaIndex(new Date());
 
   const horaActual   = new Date().getHours();
   const saludo       = horaActual < 12 ? 'Buenos días' : horaActual < 18 ? 'Buenas tardes' : 'Buenas noches';
@@ -299,18 +454,10 @@ useFocusEffect(
               : 'Conectado · Sincronización activa'}
           </Text>
           {stats.pendientes > 0 && (
-            <TouchableOpacity onPress={async () => {
-              const resultado = await sincronizarAhora();
-              await cargarDatos();
-              mostrar({
-                tipo: resultado.success ? 'exito' : 'error',
-                titulo: resultado.success ? '¡Sincronizado!' : 'Error al sincronizar',
-                mensaje: resultado.message,
-                icono: resultado.success ? 'cloud-done-outline' : 'cloud-offline-outline',
-                boton: 'Entendido',
-              });
-            }}>
-              <Text style={styles.syncLink}>Sincronizar</Text>
+            <TouchableOpacity onPress={handleSincronizar} disabled={sincronizando}>
+              <Text style={[styles.syncLink, sincronizando && { opacity: 0.5 }]}>
+                {sincronizando ? 'Subiendo...' : 'Sincronizar'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
