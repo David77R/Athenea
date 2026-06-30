@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Platform, StatusBar, Vibration, Linking
+  ActivityIndicator, Platform, StatusBar, Vibration, Linking,
+  Modal, TextInput
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+// SDK 54+ reorganizó expo-file-system con una API nueva basada en clases.
+// StorageAccessFramework (necesario para guardar en Descargas en Android)
+// solo existe en la ruta /legacy, que sigue siendo totalmente soportada.
+import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import COLORES from '../constantes/colores';
 import { useAlerta } from '../componentes/AlertaPersonalizada';
@@ -22,6 +27,64 @@ function filaTabla(label, od, oi) {
       <td class="od-cell">${od || '—'}</td>
       <td class="oi-cell">${oi || '—'}</td>
     </tr>`;
+}
+
+const SAF_DIR_KEY = 'descargas_directorio_uri';
+
+/**
+ * Descarga el PDF al dispositivo de forma directa, ANTES de abrir WhatsApp,
+ * para que el archivo ya esté disponible cuando el especialista vaya a adjuntarlo.
+ *
+ * Android: usa StorageAccessFramework. La PRIMERA vez pide al usuario elegir
+ * una carpeta (se recomienda "Descargas"); ese permiso se guarda en AsyncStorage
+ * para que las siguientes veces se escriba ahí automáticamente sin volver a preguntar.
+ * iOS: no tiene una ruta de "Descargas" accesible sin intervención del usuario,
+ * así que se usa el selector de compartir (Sharing.shareAsync) como única vía posible.
+ *
+ * Devuelve { ok: boolean, mensaje?: string } para que el llamador decida qué avisar.
+ */
+async function descargarPDF(uri, nombreArchivo) {
+  if (Platform.OS === 'android') {
+    try {
+      let directoryUri = await AsyncStorage.getItem(SAF_DIR_KEY);
+
+      if (!directoryUri) {
+        const permisos = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!permisos.granted) {
+          return { ok: false, mensaje: 'No se concedió permiso para guardar el archivo.' };
+        }
+        directoryUri = permisos.directoryUri;
+        await AsyncStorage.setItem(SAF_DIR_KEY, directoryUri);
+      }
+
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const nuevoUri = await FileSystem.StorageAccessFramework.createFileAsync(
+        directoryUri,
+        nombreArchivo,
+        'application/pdf'
+      );
+      await FileSystem.writeAsStringAsync(nuevoUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+
+      return { ok: true };
+    } catch (e) {
+      // Si el directorio guardado ya no es válido (ej. el usuario revocó el
+      // permiso desde Ajustes), se limpia para que la próxima vez se pida de nuevo.
+      await AsyncStorage.removeItem(SAF_DIR_KEY);
+      return { ok: false, mensaje: 'No se pudo guardar el PDF en el dispositivo.' };
+    }
+  }
+
+  // iOS: única vía posible es el selector de compartir/guardar
+  try {
+    await Sharing.shareAsync(uri, {
+      mimeType:    'application/pdf',
+      dialogTitle: `Guardar receta — ${nombreArchivo}`,
+      UTI:         'com.adobe.pdf',
+    });
+    return { ok: true };
+  } catch {
+    return { ok: false, mensaje: 'No se pudo guardar el PDF en el dispositivo.' };
+  }
 }
 
 function generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, especializado, fecha, nroHistoria }) {
@@ -224,6 +287,8 @@ export default function GenerarRecetaScreen({ route, navigation }) {
   const [guardando,    setGuardando]    = useState(false);
   const [enviando,     setEnviando]     = useState(false);
   const [especialista, setEspecialista] = useState({});
+  const [modalTelefono,   setModalTelefono]   = useState(false);
+  const [telefonoEditable, setTelefonoEditable] = useState('');
 
   const { mostrar, AlertaPersonalizada } = useAlerta();
 
@@ -376,19 +441,33 @@ export default function GenerarRecetaScreen({ route, navigation }) {
   }
 
   /**
+   * Abre el modal de confirmación de número antes de enviar por WhatsApp.
+   * Precarga el campo con el teléfono registrado en la historia, pero permite
+   * editarlo para enviar a otro número (ej. un familiar del paciente).
+   */
+  function abrirModalEnviar() {
+    setTelefonoEditable(paciente?.telefono || '');
+    setModalTelefono(true);
+  }
+
+  /**
    * Enviar al paciente por WhatsApp.
    * IMPORTANTE: WhatsApp no permite adjuntar archivo + texto prellenado
-   * automáticamente para apps de terceros. Este flujo abre WhatsApp con el
-   * mensaje listo y luego avisa al usuario que debe adjuntar el PDF manualmente
-   * (decisión tomada explícitamente para esta fase).
+   * automáticamente para apps de terceros. Este flujo descarga el PDF al
+   * dispositivo PRIMERO (para que ya esté listo cuando el especialista vaya
+   * a adjuntarlo) y LUEGO abre WhatsApp con el mensaje prellenado.
+   *
+   * Recibe el número a usar como parámetro (viene del modal de confirmación),
+   * en vez de leer siempre paciente.telefono, para permitir enviar a un
+   * número distinto al registrado en la historia.
    */
-  async function enviarAlPaciente() {
-    const telefono = (paciente?.telefono || '').replace(/[^\d]/g, '');
+  async function enviarAlPaciente(numeroDestino) {
+    const telefono = (numeroDestino || '').replace(/[^\d]/g, '');
     if (!telefono) {
       mostrar({
         tipo:   'error',
         titulo: 'Sin número de teléfono',
-        mensaje: 'Esta historia no tiene un número de teléfono registrado para el paciente.',
+        mensaje: 'Debes ingresar un número de teléfono válido para enviar la receta.',
         icono:  'call-outline',
         boton:  'Entendido',
       });
@@ -397,9 +476,13 @@ export default function GenerarRecetaScreen({ route, navigation }) {
 
     setEnviando(true);
     try {
-      // Genera el PDF primero para que esté listo cuando el usuario vuelva a adjuntarlo
-      const html = generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, especializado, fecha, nroHistoria });
+      const html    = generarHTML({ especialista, paciente, examen, anamnesis, diagnostico, especializado, fecha, nroHistoria });
       const { uri } = await Print.printToFileAsync({ html, base64: false });
+      const nombreArchivo = `Receta_${(paciente?.nombre || 'Paciente').replace(/\s+/g, '_')}_${nroHistoria}.pdf`;
+
+      // Descarga el PDF ANTES de abrir WhatsApp, para que ya esté disponible
+      // cuando el especialista vuelva a la conversación a adjuntarlo.
+      const descarga = await descargarPDF(uri, nombreArchivo);
 
       // Normaliza el número a formato internacional simple (Venezuela: 0XXX -> 58XXX)
       const numeroWhatsapp = telefono.startsWith('0') ? `58${telefono.slice(1)}` : telefono;
@@ -422,21 +505,17 @@ export default function GenerarRecetaScreen({ route, navigation }) {
       Vibration.vibrate(200);
       await Linking.openURL(url);
 
-      // Aviso para adjuntar el PDF manualmente al volver a la conversación
+      // El aviso final cambia según si la descarga quedó lista automáticamente
+      // (Android, ya guardada) o si el usuario tuvo que elegir dónde guardarla (iOS).
       mostrar({
-        tipo:   'exito',
-        titulo: 'Ahora adjunta el PDF',
-        mensaje: 'WhatsApp se abrió con el mensaje listo. Para enviar la receta, toca el clip 📎 dentro del chat y selecciona el PDF que se generó (puedes encontrarlo también con el botón "Guardar en dispositivo").',
-        icono:  'attach-outline',
+        tipo:   descarga.ok ? 'exito' : 'error',
+        titulo: descarga.ok ? 'Ahora adjunta el PDF' : 'PDF no descargado',
+        mensaje: descarga.ok
+          ? `WhatsApp se abrió con el mensaje listo. El PDF "${nombreArchivo}" ya está guardado en tu dispositivo — toca el clip 📎 dentro del chat y selecciónalo desde Descargas.`
+          : `WhatsApp se abrió con el mensaje listo, pero ${descarga.mensaje || 'no se pudo guardar el PDF'}. Usa el botón "Guardar en dispositivo" para intentarlo de nuevo.`,
+        icono:  descarga.ok ? 'attach-outline' : 'alert-circle-outline',
         boton:  'Entendido',
       });
-
-      // Deja el PDF disponible para que el usuario lo adjunte si lo necesita
-      await Sharing.shareAsync(uri, {
-        mimeType:    'application/pdf',
-        dialogTitle: `Adjuntar receta — ${paciente?.nombre || 'Paciente'}`,
-        UTI:         'com.adobe.pdf',
-      }).catch(() => {});
     } catch {
       mostrar({
         tipo:   'error',
@@ -562,7 +641,7 @@ export default function GenerarRecetaScreen({ route, navigation }) {
 
         <TouchableOpacity
           style={[styles.btnWhatsapp, algunaAccionEnCurso && { opacity: 0.7 }]}
-          onPress={enviarAlPaciente}
+          onPress={abrirModalEnviar}
           disabled={algunaAccionEnCurso}
         >
           {enviando
@@ -596,6 +675,49 @@ export default function GenerarRecetaScreen({ route, navigation }) {
         </TouchableOpacity>
 
       </ScrollView>
+
+      {/* Modal: confirmar o editar número antes de enviar por WhatsApp */}
+      <Modal visible={modalTelefono} transparent animationType="fade" onRequestClose={() => setModalTelefono(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCaja}>
+            <View style={styles.modalIconoCaja}>
+              <Ionicons name="logo-whatsapp" size={28} color="#25D366" />
+            </View>
+            <Text style={styles.modalTitulo}>Enviar receta por WhatsApp</Text>
+            <Text style={styles.modalSub}>
+              Confirma el número del paciente o ingresa uno distinto (ej. un familiar).
+            </Text>
+
+            <View style={styles.modalInputFila}>
+              <Ionicons name="call-outline" size={18} color={COLORES.mutedForeground} style={{ marginLeft: 14 }} />
+              <TextInput
+                style={styles.modalInput}
+                value={telefonoEditable}
+                onChangeText={setTelefonoEditable}
+                placeholder="04XX-XXXXXXX"
+                placeholderTextColor={COLORES.mutedForeground}
+                keyboardType="phone-pad"
+                autoFocus
+              />
+            </View>
+
+            <View style={styles.modalBotonesFila}>
+              <TouchableOpacity
+                style={styles.modalBtnCancelar}
+                onPress={() => setModalTelefono(false)}
+              >
+                <Text style={styles.modalBtnCancelarTexto}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalBtnConfirmar}
+                onPress={() => { setModalTelefono(false); enviarAlPaciente(telefonoEditable); }}
+              >
+                <Text style={styles.modalBtnConfirmarTexto}>Enviar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <AlertaPersonalizada />
     </View>
@@ -671,4 +793,17 @@ const styles = StyleSheet.create({
   btnWhatsapp: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#25D366', borderRadius: 16, paddingVertical: 16, marginBottom: 12 },
   btnImprimir: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: COLORES.primario, borderRadius: 16, paddingVertical: 14, marginBottom: 12 },
   btnImprimirTexto: { color: COLORES.primario, fontWeight: '700', fontSize: 15 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(13,59,68,0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalCaja:    { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%' },
+  modalIconoCaja: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#E8F8EE', justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 14 },
+  modalTitulo:  { fontSize: 17, fontWeight: '800', color: COLORES.oscuro, textAlign: 'center', marginBottom: 6 },
+  modalSub:     { fontSize: 13, color: COLORES.mutedForeground, textAlign: 'center', lineHeight: 18, marginBottom: 18 },
+  modalInputFila: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORES.borde, borderRadius: 14, backgroundColor: COLORES.muted, marginBottom: 18 },
+  modalInput:   { flex: 1, paddingHorizontal: 12, paddingVertical: 14, fontSize: 15, color: COLORES.foreground },
+  modalBotonesFila:    { flexDirection: 'row', gap: 10 },
+  modalBtnCancelar:    { flex: 1, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: COLORES.borde, alignItems: 'center' },
+  modalBtnCancelarTexto: { color: COLORES.mutedForeground, fontWeight: '700', fontSize: 14 },
+  modalBtnConfirmar:   { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#25D366', alignItems: 'center' },
+  modalBtnConfirmarTexto: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });

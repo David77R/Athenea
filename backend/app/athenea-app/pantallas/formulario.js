@@ -205,6 +205,8 @@ export default function FormularioScreen({ route, navigation }) {
   const [diagPrincipal,  setDiagPrincipal]  = useState('');
   const [prescripcion,   setPrescripcion]   = useState('');
   const [proximaCita,    setProximaCita]    = useState('');
+  const [proximaCitaObj, setProximaCitaObj] = useState(new Date());
+  const [mostrarCalCita, setMostrarCalCita] = useState(false);
   const [observaciones,  setObservaciones]  = useState('');
 
   useEffect(() => {
@@ -420,7 +422,7 @@ export default function FormularioScreen({ route, navigation }) {
       case 1:
         return (
           <View style={styles.pasoContainer}>
-            <BannerIA texto={datosIA?.motivo ? 'Anamnesis pre-rellenada por Athenea IA · Por favor verifique' : null} />
+            <BannerIA texto={datosIA?.motivo ? 'Anamnesis pre-rellenada por Athenea  · Por favor verifique' : null} />
             <Campo label="MOTIVO DE CONSULTA *" value={motivo} onChange={setMotivo} placeholder="Describe el motivo de la visita" multiline resaltado={!!datosIA?.motivo} />
             <Campo label="TIEMPO DE EVOLUCIÓN" value={tiempoEvolucion} onChange={setTiempoEvo} placeholder="Cuánto tiempo lleva con el problema" resaltado={!!datosIA?.tiempoEvolucion} />
 
@@ -449,7 +451,7 @@ export default function FormularioScreen({ route, navigation }) {
       case 2:
         return (
           <View style={styles.pasoContainer}>
-            <BannerIA texto={datosIA?.visualAcuity?.od ? 'Examen pre-rellenado por Athenea IA · Por favor verifique' : null} />
+            <BannerIA texto={datosIA?.visualAcuity?.od ? 'Examen pre-rellenado por Athenea  · Por favor verifique' : null} />
 
             <Text style={styles.subtituloSeccion}>AGUDEZA VISUAL SIN CORRECCIÓN (AVSC)</Text>
             <View style={styles.filaOjos}>
@@ -599,7 +601,38 @@ export default function FormularioScreen({ route, navigation }) {
             </View>
             <Campo label="DIAGNÓSTICO PRINCIPAL *" value={diagPrincipal} onChange={setDiagPrincipal} placeholder="Ej: Miopía simple" multiline />
             <Campo label="PRESCRIPCIÓN DE LENTES" value={prescripcion} onChange={setPrescripcion} placeholder="Ej: Lentes monofocales, protección UV" multiline />
-            <Campo label="PRÓXIMA CITA" value={proximaCita} onChange={setProximaCita} placeholder="DD/MM/AAAA" />
+
+            <View style={styles.campo}>
+              <Text style={styles.campoLabel}>PRÓXIMA CITA</Text>
+              <TouchableOpacity
+                style={[styles.input, styles.inputFecha, proximaCita && styles.inputResaltado]}
+                onPress={() => setMostrarCalCita(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={16} color={proximaCita ? OSCURO : '#AAC4CC'} />
+                <Text style={[styles.fechaTexto, !proximaCita && { color: '#AAC4CC' }]}>
+                  {proximaCita || 'Seleccionar fecha'}
+                </Text>
+                <Ionicons name="chevron-down" size={14} color="#AAC4CC" />
+              </TouchableOpacity>
+              {mostrarCalCita && (
+                <DateTimePicker
+                  value={proximaCitaObj}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  minimumDate={new Date()}
+                  onChange={(event, selectedDate) => {
+                    setMostrarCalCita(false);
+                    if (event.type === 'dismissed' || !selectedDate) return;
+                    setProximaCitaObj(selectedDate);
+                    const dias  = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+                    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+                    setProximaCita(`${dias[selectedDate.getDay()]}, ${selectedDate.getDate()} de ${meses[selectedDate.getMonth()]} de ${selectedDate.getFullYear()}`);
+                  }}
+                />
+              )}
+            </View>
+
             <Campo label="OBSERVACIONES" value={observaciones} onChange={setObservaciones} placeholder="Notas adicionales" multiline />
           </View>
         );
