@@ -21,7 +21,11 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.david.athenea"
+      "package": "com.david.athenea",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -30,6 +34,11 @@
       "expo-sqlite",
       "@react-native-voice/voice",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a7dbba1d-619f-4bf5-8773-ad907ed748a5"
+      }
+    }
   }
 }
