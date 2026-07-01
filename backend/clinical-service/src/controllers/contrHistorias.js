@@ -15,7 +15,7 @@ async function crearHistoria(req, res) {
         }
 
         console.error(e);
-        return res.status(500).json({ error: 'Error.... go backkkkk'});
+        return res.status(500).json({ error: 'Error interno :('});
     }
 }
 

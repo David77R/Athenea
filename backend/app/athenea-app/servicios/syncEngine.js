@@ -13,6 +13,7 @@ let sincronizandoAhora = false;
 
 export async function sincronizarPendientes() {
   console.log('INICIANDO SYNC...');
+
   if (sincronizandoAhora) return { success: false, message: 'Sincronizando ahora' };
   const estado = await NetInfo.fetch();
   if (!estado.isConnected) {
@@ -29,6 +30,7 @@ export async function sincronizarPendientes() {
   const token = await AsyncStorage.getItem('token');
   let subidos = 0;
   let fallos = 0;
+  
 function convertirFecha(fechaStr) {
     if (!fechaStr) return null;
     const partes = fechaStr.split('/');
