@@ -11,7 +11,6 @@ import CONFIG from '../config';
 import COLORES from '../constantes/colores';
 import { useAlerta } from '../componentes/AlertaPersonalizada';
 
-// ─── Intento de login contra el servidor ───────────────────────────────────
 async function intentarLoginServidor(email, password) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
@@ -30,7 +29,6 @@ async function intentarLoginServidor(email, password) {
   }
 }
 
-// ─── Login offline con cuentas locales ─────────────────────────────────────
 async function loginLocal(email, password) {
   try {
     const raw     = await AsyncStorage.getItem('cuentas_locales');
@@ -64,7 +62,6 @@ export default function LoginScreen({ navigation, setToken }) {
     return Object.keys(e).length === 0;
   }
 
-  // Email no verificado (403): alert con mensaje del backend + botón para abrir Gmail.
   function mostrarAlertaNoVerificado(mensajeBackend) {
     mostrar({
       tipo: 'error',
@@ -78,7 +75,6 @@ export default function LoginScreen({ navigation, setToken }) {
     });
   }
 
-  // Bloqueo temporal por intentos fallidos (429): alert con minutos restantes.
   function mostrarAlertaBloqueo(minutosRestantes) {
     mostrar({
       tipo: 'error',
@@ -101,7 +97,6 @@ export default function LoginScreen({ navigation, setToken }) {
     try {
       const resp = await intentarLoginServidor(emailNorm, password);
 
-      // ── Servidor disponible y responde OK ──
       if (resp && resp.ok) {
         const datos = await resp.json();
         console.log('datos del servidor:', JSON.stringify(datos));
@@ -114,30 +109,24 @@ export default function LoginScreen({ navigation, setToken }) {
             ['cedula',   datos.user?.cedula   || ''],
 
         ]);
-        setToken(datos.token); // ← el navigator condicional redirige automáticamente
+        setToken(datos.token); 
         return;
       }
 
-      // ── Servidor responde con error ──
       if (resp && !resp.ok) {
         let d = {};
         try { d = await resp.json(); } catch {}
 
-        // Email no verificado (Fase 4b)
         if (resp.status === 403) {
           mostrarAlertaNoVerificado(d.mensaje);
           return;
         }
 
-        // Bloqueo temporal por intentos fallidos (Fase 4a)
         if (resp.status === 429) {
           mostrarAlertaBloqueo(d.minutosRestantes);
           return;
         }
 
-        // Credenciales inválidas (401) u otro error — comportamiento original,
-        // mostrando además los intentos restantes si el backend los envía,
-        // para avisar al usuario antes de que llegue al bloqueo.
         let msg = d.error || 'Credenciales inválidas';
         if (typeof d.intentosRestantes === 'number') {
           msg += ` (te quedan ${d.intentosRestantes} intento${d.intentosRestantes === 1 ? '' : 's'} antes del bloqueo temporal)`;
@@ -146,7 +135,6 @@ export default function LoginScreen({ navigation, setToken }) {
         return;
       }
 
-      // ── Sin servidor — intentar cuenta local ──
       const local = await loginLocal(emailNorm, password);
       if (local) {
         await AsyncStorage.multiSet([

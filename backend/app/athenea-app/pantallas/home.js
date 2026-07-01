@@ -20,7 +20,6 @@ import { useAlerta } from '../componentes/AlertaPersonalizada';
 
 const { width } = Dimensions.get('window');
 
-// ── Días de la semana empezando en Lunes ──────────────────────────────────
 const DIAS_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
 function getDiaIndex(fecha) {
@@ -63,7 +62,6 @@ function formatearFechaHoy() {
   return `${dias[hoy.getDay()]}, ${hoy.getDate()} de ${meses[hoy.getMonth()]}`;
 }
 
-// ── Sincronización: sube historias pendientes al clinical-service ──────────
 async function sincronizarAhora() {
   try {
     const token      = await AsyncStorage.getItem('token');
@@ -185,7 +183,6 @@ export default function HomeScreen({ navigation, setToken }) {
   const [ultimaConsulta, setUltimaConsulta] = useState(null);
   const [sincronizando,  setSincronizando]  = useState(false);
 
-  // Ref para el timer de sincronización automática
   const timerSync = useRef(null);
 
   useEffect(() => {

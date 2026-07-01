@@ -19,6 +19,15 @@ app.use(express.json());
  * Primeramente la conversión y transcripción de audio de ffmpg a .wav para que vosk lo procese
 */
 
+/**
+ * 
+ * @param {string} audioPath Ruta archivo de audio
+ * @param {string} modelPath Ruta del directorio de Vosk
+ * @returns {Promise<string>} Texto transcrito
+ * @throws {Error} si ffmpeg falla en conversió o python
+ */
+
+
 function transcribirAudio(audioPath, modelPath) {
   return new Promise((resolve, reject) => {
     const wavPath = audioPath + ".wav";
@@ -43,6 +52,8 @@ function transcribirAudio(audioPath, modelPath) {
 /**
  * Funcion para convert los textos a los numeros
  */
+
+
 
 function convertirTextoANumeros(texto) {
   return texto
@@ -76,7 +87,9 @@ function convertirTextoANumeros(texto) {
 }
 /**
  * Parsers locales por si falla la api de groq para recibir y rellenar los campos
- */
+ * @param {string} rawText texto que transcribe vosk
+ * @returns {Object} campos clinicos extraidos del dictado
+*/
 
 function extraerPaciente(lower) {
   const p = convertirTextoANumeros(lower);
@@ -177,7 +190,7 @@ function parsearLocal(rawText) {
   };
 }
 
-/=========================================================================================/
+
 
 /**
  * Prompt de Groq para procesar el audio y rellenar los campos 
@@ -304,9 +317,9 @@ ${plantilla}`,
   return { ...datos, narrative: rawText, _fuente: "groq" };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ENDPOINTS
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Endpoints
+ */
 app.get("/health", (_req, res) => {
   res.json({
     status:  "ok",
@@ -356,7 +369,7 @@ app.post("/structure", async (req, res) => {
 });
 
 
-// Diagnosticos y sugerencias por refraccion 
+
 
 app.post("/diagnostico", (req, res) => {
   const { refraccion } = req.body;

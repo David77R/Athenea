@@ -133,9 +133,6 @@ const resp = await intentarRegistroServidor(email, password, nombre, telefono, c
      console.log('RESPUESTA REGISTRO:', resp?.status, resp?.ok);
 
       if (resp && resp.ok) {
-        // Servidor disponible: el registro NO devuelve token. La cuenta
-        // queda creada pero sin verificar; el usuario debe confirmar su
-        // correo antes de poder iniciar sesión.
         let datos = {};
         try { datos = await resp.json(); } catch {}
         mostrarAlertaVerificacion(datos.email || emailNorm);
@@ -160,8 +157,6 @@ onConfirmar: () => navigation.navigate('Login'),
   setErrores({ general: msg });
   return;
 } else {
-  // Sin servidor → registro local. Aquí sí se entra directo a la app,
-  // ya que no hay backend disponible para exigir verificación de correo.
   const local = await registrarLocal(emailNorm, password, nombre);
   if (!local.ok) { setErrores({ general: local.error || 'Error local' }); return; }
 

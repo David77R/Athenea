@@ -16,7 +16,6 @@ import { useAlerta } from '../componentes/AlertaPersonalizada';
 const OD_COLOR = '#1565C0';
 const OI_COLOR = '#C62828';
 
-// ─── Parsear datos JSON de cada historia ────────────────────────────────────
 function parsearHistoria(item) {
   try {
     const datos = typeof item.datos === 'string' ? JSON.parse(item.datos) : item.datos;
@@ -42,7 +41,6 @@ function parsearHistoria(item) {
   }
 }
 
-// ─── Formatear fecha ────────────────────────────────────────────────────────
 function formatFecha(fechaStr) {
   if (!fechaStr) return 'Sin fecha';
   try {
@@ -51,7 +49,6 @@ function formatFecha(fechaStr) {
   } catch { return fechaStr; }
 }
 
-// ─── Fila de detalle en el modal ────────────────────────────────────────────
 function FilaDetalle({ label, valor }) {
   if (!valor) return null;
   return (
@@ -162,7 +159,6 @@ export default function HistorialClinico({ navigation, route, setToken }) {
     });
   }
 
-  // ─── Card de historia ──────────────────────────────────────────────────
   function renderCard({ item }) {
     const sync = item.sincronizado === 1;
     return (
@@ -207,7 +203,6 @@ export default function HistorialClinico({ navigation, route, setToken }) {
     );
   }
 
-  // ─── Modal de detalle ──────────────────────────────────────────────────
   function ModalDetalle() {
     if (!historiaSeleccionada) return null;
     const h = historiaSeleccionada;

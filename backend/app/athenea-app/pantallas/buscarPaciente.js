@@ -30,7 +30,7 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
 
   const { mostrar, AlertaPersonalizada } = useAlerta();
 
-  // ─── Buscar ──────────────────────────────────────────────────────────────
+  
   async function buscar() {
     if (!cedula.trim()) {
       mostrar({
@@ -69,7 +69,7 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
         return;
       }
     } catch {
-      // Sin servidor → buscar local
+
     }
 
     // Fallback local
@@ -111,7 +111,6 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
     setModalVisible(true);
   }
 
-  // ─── Registrar paciente nuevo ─────────────────────────────────────────────
   async function registrarPaciente() {
     if (!formNombre.trim() || !formApellido.trim()) {
       mostrar({
@@ -193,7 +192,11 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
     } catch { return f; }
   }
 
-  // ─── Card de resultado ────────────────────────────────────────────────────
+  /**
+   * resultados de búsqueda
+   */
+
+
   function renderCard({ item }) {
     const nombre = item.paciente?.nombre || 'Paciente';
     return (
@@ -271,7 +274,7 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
         mostrarBack={true}
       />
 
-      {/* Barra de búsqueda */}
+      {}
       <View style={styles.buscadorContenedor}>
         <View style={styles.buscadorFila}>
           <View style={styles.buscadorCaja}>
@@ -312,7 +315,7 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
         </View>
       )}
 
-      {/* Contador */}
+      {}
       {buscado && !buscando && (
         <View style={styles.contadorFila}>
           <Text style={styles.contadorTexto}>
@@ -352,7 +355,7 @@ export default function BuscarPacienteScreen({ navigation, setToken }) {
         }
       />
 
-      {/* Modal registro nuevo paciente */}
+      {/*modal para paciente nv*/}
       <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCaja}>

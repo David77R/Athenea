@@ -20,10 +20,8 @@ export default function PerfilScreen({ navigation, setToken }) {
 
   const { mostrar, AlertaPersonalizada } = useAlerta();
 
-  // ── Carga perfil desde AsyncStorage ──────────────────────────────────────
   useEffect(() => { cargarPerfil(); }, []);
 
-  // ── Recarga estadísticas cada vez que vuelves a la pantalla ──────────────
   useFocusEffect(
     useCallback(() => {
       cargarEstadisticas();
@@ -226,7 +224,6 @@ const styles = StyleSheet.create({
   rolBadge:         { backgroundColor: COLORES.secundario, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 4 },
   rolTexto:         { fontSize: 13, fontWeight: '600', color: COLORES.primario },
 
-  // Tarjeta de estadísticas
   tarjetaStats: {
     borderRadius: 20, marginBottom: 16,
     elevation: 4, shadowColor: COLORES.primario, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
@@ -244,7 +241,6 @@ const styles = StyleSheet.create({
   statsNumero:  { fontSize: 32, fontWeight: '800', color: '#fff', lineHeight: 36 },
   statsLabel:   { fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: '500', marginTop: 2 },
 
-  // Tarjeta de datos
   tarjeta: {
     backgroundColor: '#fff', borderRadius: 20, padding: 8, marginBottom: 20,
     elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },

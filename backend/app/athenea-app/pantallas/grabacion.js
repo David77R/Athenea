@@ -27,7 +27,6 @@ export default function GrabacionScreen({ navigation, route }) {
 
   const { mostrar, AlertaPersonalizada } = useAlerta();
 
-  // ─── Animación de pulso ──────────────────────────────────────────────────
   function iniciarPulso() {
     Animated.loop(
       Animated.sequence([
@@ -42,7 +41,6 @@ export default function GrabacionScreen({ navigation, route }) {
     Animated.timing(pulsoAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
   }
 
-  // ─── Iniciar grabación ───────────────────────────────────────────────────
   async function iniciarGrabacion() {
     try {
       const { status } = await Audio.requestPermissionsAsync();
@@ -81,7 +79,6 @@ export default function GrabacionScreen({ navigation, route }) {
     }
   }
 
-  // ─── Detener y transcribir ───────────────────────────────────────────────
   async function detenerGrabacion() {
     try {
       clearInterval(intervalRef.current);
@@ -128,7 +125,6 @@ export default function GrabacionScreen({ navigation, route }) {
     }
   }
 
-  // ─── Enviar a /structure y navegar al formulario ─────────────────────────
   async function usarTexto() {
     if (!textoTranscrito) return;
     setProcesando(true);
@@ -314,7 +310,7 @@ export default function GrabacionScreen({ navigation, route }) {
           </View>
         ) : null}
 
-        {/* Consejos */}
+        {}
         <View style={styles.tarjetaConsejos}>
           <View style={styles.consejosHeader}>
             <Ionicons name="bulb-outline" size={16} color={COLORES.advertencia} />

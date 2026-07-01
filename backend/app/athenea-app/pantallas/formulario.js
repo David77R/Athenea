@@ -41,10 +41,7 @@ function parsearFecha(str) {
   return fecha;
 }
 
-// Formatea el texto crudo de Vosk para que se vea mas ordenado en el modal.
-// Detecta palabras clave clinicas y agrega saltos de linea antes de ellas,
-// de forma que el especialista pueda leer el dictado sección por sección
-// sin que sea un bloque de texto amontonado.
+
 function formatearTextoVosk(texto) {
   if (!texto) return '';
   const MARCADORES = [
@@ -246,9 +243,7 @@ export default function FormularioScreen({ route, navigation }) {
     if (datosIA.tipoLentes)         setTipoLentes(datosIA.tipoLentes);
     if (datosIA.medicamentos)       setMedicamentos(datosIA.medicamentos);
 
-    // Agudeza visual: se asigna siempre que el campo no sea null/undefined,
-    // incluso si es string vacio, para evitar el bug donde el OI no se
-    // renderizaba por la condicion if (truthy) siendo demasiado restrictiva.
+
     const av = datosIA.visualAcuity;
     if (av) {
       if (av.od  != null) setAvscOD(String(av.od));
@@ -544,7 +539,7 @@ export default function FormularioScreen({ route, navigation }) {
       case 3:
         return (
           <View style={styles.pasoContainer}>
-            <BannerIA texto={datosIA?.tonometria || datosIA?.lensometria ? 'Examen especializado pre-rellenado por Athenea IA · Por favor verifique' : null} />
+            <BannerIA texto={datosIA?.tonometria || datosIA?.lensometria ? 'Examen especializado pre-rellenado por Athenea · Por favor verifique' : null} />
 
             <Campo
               label="TONOMETRÍA"

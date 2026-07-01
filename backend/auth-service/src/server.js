@@ -13,7 +13,7 @@ const PORT       = Number(process.env.PORT || 3001);
 const JWT_SECRET = process.env.JWT_SECRET;
 
 const MAX_INTENTOS_LOGIN  = 5;
-const BLOQUEO_SEGUNDOS    = 15 * 60; // 15 minutos
+const BLOQUEO_SEGUNDOS    = 15 * 60; 
 
 app.use(cors());
 app.use(express.json());
@@ -22,6 +22,14 @@ function assertEnv() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL es obligatoria");
   if (!JWT_SECRET || JWT_SECRET.length < 16) throw new Error("JWT_SECRET inválido");
 }
+
+/**
+ * se implementa el middleware para validar el jwt
+ * de ser valido agrega el payload decodificado en req.usuario.
+ * @param {Object} req - Solicitud HTTP con header Authorization: Bearer <token>.
+ * @param {Object} res - Respuesta HTTP.
+ * @param {Function} next - Siguiente middleware en la cadena.
+ */
 
 function verificarToken(req, res, next) {
   const header = req.headers.authorization || '';
@@ -35,13 +43,22 @@ function verificarToken(req, res, next) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RATE LIMITING DE LOGIN (Fase 4a) — bloqueo temporal tras intentos fallidos
-// ─────────────────────────────────────────────────────────────────────────────
-
+/**
+ * Bloquea por intentos fallidos y verifica con nodemailer
+ * @param {string} email
+ * @returns {string} clave login_attempts:<email>
+ */
 function claveIntentos(email) {
   return `login_attempts:${email.toLowerCase()}`;
 }
+
+/**
+ * contador de intentos fallidos en redis para un email
+ * al primer fallido reinicia con un ttl 15 mins
+ * @param {Object} redis - Cliente Redis activo
+ * @param {string} email - Correo del usuario que falló el login
+ * @returns {Promise<number>} total intentos
+ */
 
 async function registrarIntentoFallido(redis, email) {
   const key = claveIntentos(email);
@@ -67,9 +84,6 @@ async function limpiarIntentosFallidos(redis, email) {
   await redis.del(claveIntentos(email));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VERIFICACIÓN DE EMAIL (Fase 4b) — Gmail + Nodemailer
-// ─────────────────────────────────────────────────────────────────────────────
 
 let transporter = null;
 function getTransporter() {
@@ -95,7 +109,7 @@ async function enviarCorreoVerificacion(email, token) {
   await getTransporter().sendMail({
     from: `"Athenea" <${process.env.GMAIL_USER}>`,
     to: email,
-    subject: "Confirma tu cuenta en Athenea",
+    subject: "Confirme su cuenta en Athenea",
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
         <h2 style="color: #0B7B8B;">Bienvenido a Athenea</h2>
@@ -111,9 +125,7 @@ async function enviarCorreoVerificacion(email, token) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ENDPOINTS
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 app.post("/register", async (req, res) => {
   console.log('registro recibido:', req.body);
@@ -136,13 +148,15 @@ app.post("/register", async (req, res) => {
     try {
       await enviarCorreoVerificacion(user.email, tokenVerificacion);
     } catch (errCorreo) {
-      // Si el correo falla, el usuario queda registrado pero sin poder verificar
-      // todavía vía email; se loguea el error para diagnóstico pero no se rompe
-      // el registro, ya que la cuenta puede reenviar verificación más adelante.
+  /**
+   * El registro ya quedó guardado, solo falló el correo - Se registra el error pero no se cancela el registro
+   */
       console.error("[/register] Error enviando correo de verificación:", errCorreo.message);
     }
 
-    // No se devuelve token: la cuenta no puede usarse hasta confirmar el correo.
+    /**
+     * no devuelve token no se puede usar hasta confirm email 
+     */
     return res.status(201).json({
       mensaje: "Cuenta creada. Revisa tu correo para confirmar tu cuenta antes de iniciar sesión.",
       email: user.email,
@@ -196,7 +210,6 @@ app.post("/login", async (req, res) => {
 
   const redis = await getRedis();
 
-  // Bloqueo temporal por intentos fallidos (Fase 4a) — se revisa antes de tocar la base.
   const estadoBloqueo = await obtenerEstadoBloqueo(redis, email);
   if (estadoBloqueo.bloqueado) {
     return res.status(429).json({
@@ -229,8 +242,9 @@ app.post("/login", async (req, res) => {
     });
   }
 
-  // Verificación de email (Fase 4b) — se revisa después de confirmar la contraseña,
-  // para no revelar si una cuenta existe a quien no conoce la contraseña correcta.
+  /**
+   * procesa la verificación de email sin mostrar si una cuenta existe
+   */
   if (!user.email_verificado) {
     return res.status(403).json({
       error: "email no verificado",
@@ -238,7 +252,6 @@ app.post("/login", async (req, res) => {
     });
   }
 
-  // Login exitoso: se limpia el contador de intentos fallidos.
   await limpiarIntentosFallidos(redis, email);
 
   const token = jwt.sign(

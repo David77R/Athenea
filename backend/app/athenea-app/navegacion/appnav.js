@@ -56,7 +56,7 @@ export default function AppNav({ token, setToken }) {
         }}
       >
         {!token ? (
-          // ── Pantallas de autenticación ──────────────────────────────────
+          
           <>
             <Stack.Screen
               name="Animaciones"
@@ -71,7 +71,7 @@ export default function AppNav({ token, setToken }) {
             </Stack.Screen>
           </>
         ) : (
-          // ── Pantallas principales ───────────────────────────────────────
+
           <>
             <Stack.Screen name="Home" options={transicionFade}>
               {(props) => <Home {...props} setToken={setToken} />}

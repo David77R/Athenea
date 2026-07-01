@@ -1,6 +1,5 @@
 /**
- * Cliente Redis: revocación ligera de sesiones / rate limit / caché de JWKS futura.
- * URL desde variable de entorno REDIS_URL.
+ * REDIS_URL 
  */
 const { createClient } = require("redis");
 

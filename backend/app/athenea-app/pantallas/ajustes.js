@@ -72,7 +72,7 @@ export default function AjustesScreen({ navigation }) {
     mostrar({
       tipo: 'confirmacion',
       titulo: '⚠️ Borrar todo',
-      mensaje: '¿Estás seguro? Se eliminarán TODAS las historias del dispositivo, incluyendo las no sincronizadas. Esta acción no se puede deshacer.',
+      mensaje: '¿Está seguro? Se eliminarán TODAS las historias del dispositivo, incluyendo las no sincronizadas. Esta acción no se puede deshacer.',
       icono: 'warning-outline',
       botonCancelar: 'Cancelar',
       botonConfirmar: 'Sí, borrar todo',

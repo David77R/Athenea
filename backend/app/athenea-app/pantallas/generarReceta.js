@@ -8,9 +8,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-// SDK 54+ reorganizó expo-file-system con una API nueva basada en clases.
-// StorageAccessFramework (necesario para guardar en Descargas en Android)
-// solo existe en la ruta /legacy, que sigue siendo totalmente soportada.
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import COLORES from '../constantes/colores';
@@ -31,18 +28,7 @@ function filaTabla(label, od, oi) {
 
 const SAF_DIR_KEY = 'descargas_directorio_uri';
 
-/**
- * Descarga el PDF al dispositivo de forma directa, ANTES de abrir WhatsApp,
- * para que el archivo ya esté disponible cuando el especialista vaya a adjuntarlo.
- *
- * Android: usa StorageAccessFramework. La PRIMERA vez pide al usuario elegir
- * una carpeta (se recomienda "Descargas"); ese permiso se guarda en AsyncStorage
- * para que las siguientes veces se escriba ahí automáticamente sin volver a preguntar.
- * iOS: no tiene una ruta de "Descargas" accesible sin intervención del usuario,
- * así que se usa el selector de compartir (Sharing.shareAsync) como única vía posible.
- *
- * Devuelve { ok: boolean, mensaje?: string } para que el llamador decida qué avisar.
- */
+
 async function descargarPDF(uri, nombreArchivo) {
   if (Platform.OS === 'android') {
     try {
@@ -67,8 +53,7 @@ async function descargarPDF(uri, nombreArchivo) {
 
       return { ok: true };
     } catch (e) {
-      // Si el directorio guardado ya no es válido (ej. el usuario revocó el
-      // permiso desde Ajustes), se limpia para que la próxima vez se pida de nuevo.
+
       await AsyncStorage.removeItem(SAF_DIR_KEY);
       return { ok: false, mensaje: 'No se pudo guardar el PDF en el dispositivo.' };
     }
@@ -408,12 +393,7 @@ export default function GenerarRecetaScreen({ route, navigation }) {
     }
   }
 
-  /**
-   * Guardar en dispositivo: genera el PDF y abre el panel de compartir nativo,
-   * que en ambas plataformas ofrece la opción de guardar en archivos/Descargas.
-   * Se distingue del botón "Generar y compartir" solo por el texto del diálogo,
-   * tal como se decidió, para no duplicar lógica de permisos por plataforma.
-   */
+  
   async function guardarEnDispositivo() {
     setGuardando(true);
     try {
@@ -440,27 +420,13 @@ export default function GenerarRecetaScreen({ route, navigation }) {
     }
   }
 
-  /**
-   * Abre el modal de confirmación de número antes de enviar por WhatsApp.
-   * Precarga el campo con el teléfono registrado en la historia, pero permite
-   * editarlo para enviar a otro número (ej. un familiar del paciente).
-   */
+
+
   function abrirModalEnviar() {
     setTelefonoEditable(paciente?.telefono || '');
     setModalTelefono(true);
   }
 
-  /**
-   * Enviar al paciente por WhatsApp.
-   * IMPORTANTE: WhatsApp no permite adjuntar archivo + texto prellenado
-   * automáticamente para apps de terceros. Este flujo descarga el PDF al
-   * dispositivo PRIMERO (para que ya esté listo cuando el especialista vaya
-   * a adjuntarlo) y LUEGO abre WhatsApp con el mensaje prellenado.
-   *
-   * Recibe el número a usar como parámetro (viene del modal de confirmación),
-   * en vez de leer siempre paciente.telefono, para permitir enviar a un
-   * número distinto al registrado en la historia.
-   */
   async function enviarAlPaciente(numeroDestino) {
     const telefono = (numeroDestino || '').replace(/[^\d]/g, '');
     if (!telefono) {
@@ -480,14 +446,11 @@ export default function GenerarRecetaScreen({ route, navigation }) {
       const { uri } = await Print.printToFileAsync({ html, base64: false });
       const nombreArchivo = `Receta_${(paciente?.nombre || 'Paciente').replace(/\s+/g, '_')}_${nroHistoria}.pdf`;
 
-      // Descarga el PDF ANTES de abrir WhatsApp, para que ya esté disponible
-      // cuando el especialista vuelva a la conversación a adjuntarlo.
       const descarga = await descargarPDF(uri, nombreArchivo);
 
-      // Normaliza el número a formato internacional simple (Venezuela: 0XXX -> 58XXX)
       const numeroWhatsapp = telefono.startsWith('0') ? `58${telefono.slice(1)}` : telefono;
 
-      const mensaje = `Buenas tardes ${paciente?.nombre || ''}, su receta óptica ya está lista. En unos segundos le adjuntaré el PDF con todos los detalles.`;
+      const mensaje = `Buenas tardes ${paciente?.nombre || ''}, su receta óptica ya está lista. Aquí le adjunto el PDF con todos los detalles.`;
       const url = `whatsapp://send?phone=${numeroWhatsapp}&text=${encodeURIComponent(mensaje)}`;
 
       const puedeAbrir = await Linking.canOpenURL(url);
@@ -505,8 +468,7 @@ export default function GenerarRecetaScreen({ route, navigation }) {
       Vibration.vibrate(200);
       await Linking.openURL(url);
 
-      // El aviso final cambia según si la descarga quedó lista automáticamente
-      // (Android, ya guardada) o si el usuario tuvo que elegir dónde guardarla (iOS).
+    
       mostrar({
         tipo:   descarga.ok ? 'exito' : 'error',
         titulo: descarga.ok ? 'Ahora adjunta el PDF' : 'PDF no descargado',
@@ -676,7 +638,7 @@ export default function GenerarRecetaScreen({ route, navigation }) {
 
       </ScrollView>
 
-      {/* Modal: confirmar o editar número antes de enviar por WhatsApp */}
+      {/*confirmar o editar número antes de enviar por WhatsApp */}
       <Modal visible={modalTelefono} transparent animationType="fade" onRequestClose={() => setModalTelefono(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCaja}>

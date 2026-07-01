@@ -59,7 +59,6 @@ export function useAlerta() {
     const tipo   = TIPOS[config.tipo] || TIPOS.exito;
     const esConf = config.tipo === 'confirmacion';
 
-    // Icono: usa el personalizado si se pasa, si no el del tipo
     const iconoFinal = config.icono || tipo.icono;
 
     return (
