@@ -1,6 +1,9 @@
 const mongoose = require ('mongoose');
 
 const historiaSchema = new mongoose.Schema({
+    historia_id: { type: String, required: true, unique: true, sparse: true, index: true },
+    paciente_id: { type: String, required: true, index: true },
+
     paciente:{
         nombre: { type: String, required: true},
         cedula: { type: String, required: true},

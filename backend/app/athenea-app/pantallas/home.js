@@ -87,6 +87,8 @@ async function sincronizarAhora() {
             Authorization:  `Bearer ${token}`,
           },
           body: JSON.stringify({
+            historia_id: fila.id,
+            paciente_id: paciente?.cedula || '',
             especialista_email:   email,
             paciente: {
               nombre:          paciente?.nombre          || '',
@@ -131,6 +133,9 @@ async function sincronizarAhora() {
         });
 
         if (resp.ok) {
+          await marcarComoSincronizada(fila.id);
+          subidas++;
+        } else if (resp.status === 409) {
           await marcarComoSincronizada(fila.id);
           subidas++;
         } else {
@@ -195,8 +200,6 @@ export default function HomeScreen({ navigation, setToken }) {
     }, [])
   );
 
-  // Timer de sincronización automática cada 60 segundos.
-  // Solo corre si hay pendientes, para no hacer requests innecesarios.
   useEffect(() => {
     timerSync.current = setInterval(async () => {
       const pendientes = await obtenerHistoriasPendientes();

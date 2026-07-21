@@ -323,14 +323,16 @@ export default function FormularioScreen({ route, navigation }) {
   }
 
   async function guardar() {
+    const pacienteId = `${cedulaPrefix}${cedula}`;
+
     const historia = {
-      paciente:      { nombre: capitalizeWords(nombre), cedula: `${cedulaPrefix}${cedula}`, fechaNac, edad, telefono, ocupacion, fechaConsulta, nroHistoria },
+      paciente:      { nombre: capitalizeWords(nombre), cedula: pacienteId, fechaNac, edad, telefono, ocupacion, fechaConsulta, nroHistoria },
       anamnesis:     { motivo, tiempoEvolucion, antOcularPersonal, antOcularFamiliar, antMedicos, usaLentes, tipoLentes, medicamentos },
       examen:        { avscOD, avscOI, avccOD, avccOI, esfOD, esfOI, cilOD, cilOI, ejeOD, ejeOI, addOD, addOI, pioOD, pioOI, ishaOD, ishaOI, biomicroscopia, fondoOjoOD, fondoOjoOI },
       especializado: { tonometria, lensometria, autorrefractometria, oftalmoscopio, derivacion },
       diagnostico:   { diagPrincipal, prescripcion, proximaCita, observaciones },
     };
-    const id = `HC-${Date.now()}`;
+    const id = nroHistoria;
     try {
       const token = await AsyncStorage.getItem('token');
       let guardadoEnNube = false;
@@ -339,8 +341,10 @@ export default function FormularioScreen({ route, navigation }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
+            historia_id: nroHistoria,
+            paciente_id: pacienteId,
             especialista_email: await AsyncStorage.getItem('email') || '',
-            paciente: { nombre: historia.paciente.nombre, cedula: historia.paciente.cedula, fecha_nacimiento: fechaNac || null, telefono: telefono || '' },
+            paciente: { nombre: historia.paciente.nombre, cedula: pacienteId, fecha_nacimiento: fechaNac || null, telefono: telefono || '' },
             motivo_consulta: motivo,
             agudeza_visual:  { ojo_derecho: avscOD, ojo_izquierdo: avscOI },
             refraccion: {
@@ -421,7 +425,6 @@ export default function FormularioScreen({ route, navigation }) {
             <Campo label="MOTIVO DE CONSULTA *" value={motivo} onChange={setMotivo} placeholder="Describe el motivo de la visita" multiline resaltado={!!datosIA?.motivo} />
             <Campo label="TIEMPO DE EVOLUCIÓN" value={tiempoEvolucion} onChange={setTiempoEvo} placeholder="Cuánto tiempo lleva con el problema" resaltado={!!datosIA?.tiempoEvolucion} />
 
-            {/* Boton unico para marcar los 3 antecedentes como No aplica */}
             <TouchableOpacity
               style={styles.btnNoAplicaTodos}
               onPress={() => { setAntOcPer('No aplica'); setAntOcFam('No aplica'); setAntMed('No aplica'); }}

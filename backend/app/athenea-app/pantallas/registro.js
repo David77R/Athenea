@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, ScrollView, Platform, StatusBar,
-  KeyboardAvoidingView, Alert, Linking
+  KeyboardAvoidingView, Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,7 +29,6 @@ async function intentarRegistroServidor(email, password, nombre, telefono, cedul
   }
 }
 
-// ─── Registro local si no hay servidor ─────────────────────────────────────
 async function registrarLocal(email, password, nombre) {
   const raw = await AsyncStorage.getItem('cuentas_locales');
   const cuentas = raw ? JSON.parse(raw) : {};
@@ -40,7 +39,41 @@ async function registrarLocal(email, password, nombre) {
   return { ok: true, token };
 }
 
-// ─── Campo reutilizable ────────────────────────────────────────────────────
+const REQUISITOS_PASSWORD = [
+  { clave: 'longitud',  label: 'Mínimo 8 caracteres',        test: (p) => p.length >= 8 },
+  { clave: 'mayuscula', label: 'Una letra mayúscula',         test: (p) => /[A-Z]/.test(p) },
+  { clave: 'minuscula', label: 'Una letra minúscula',         test: (p) => /[a-z]/.test(p) },
+  { clave: 'numero',    label: 'Un número',                   test: (p) => /[0-9]/.test(p) },
+  { clave: 'simbolo',   label: 'Un símbolo especial (!@#$%)', test: (p) => /[^A-Za-z0-9]/.test(p) },
+];
+
+function passwordCumpleTodo(password) {
+  return REQUISITOS_PASSWORD.every(r => r.test(password || ''));
+}
+
+function ChecklistPassword({ password }) {
+  if (!password) return null;
+  return (
+    <View style={styles.checklist}>
+      {REQUISITOS_PASSWORD.map(req => {
+        const cumplido = req.test(password);
+        return (
+          <View key={req.clave} style={styles.checklistFila}>
+            <Ionicons
+              name={cumplido ? 'checkmark-circle' : 'ellipse-outline'}
+              size={14}
+              color={cumplido ? COLORES.exito : COLORES.mutedForeground}
+            />
+            <Text style={[styles.checklistTexto, cumplido && { color: COLORES.exito, fontWeight: '600' }]}>
+              {req.label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 function Campo({ label, value, onChange, onClearError, placeholder, icono, keyboardType = 'default', secure = false, onToggleSecure, mostrarToggle = false, error = '' }) {
   return (
     <View style={styles.campo}>
@@ -98,17 +131,13 @@ const { mostrar, AlertaPersonalizada } = useAlerta();
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = 'Correo no válido';
     if (!telefono || telefono.length < 7)      e.telefono  = 'Teléfono inválido';
     if (!password)                             e.password  = 'La contraseña es obligatoria';
-    else if (password.length < 6)             e.password  = 'Mínimo 6 caracteres';
+    else if (!passwordCumpleTodo(password))    e.password  = 'La contraseña no cumple todos los requisitos de seguridad';
     if (!confirmar)                            e.confirmar = 'Confirme su contraseña';
     else if (confirmar !== password)          e.confirmar = 'Las contraseñas no coinciden';
     setErrores(e);
     return Object.keys(e).length === 0;
   }
 
-  // Alert mostrado cuando el registro fue exitoso EN SERVIDOR: la cuenta no
-  // puede usarse todavía porque falta confirmar el correo. No se guarda
-  // sesión ni se navega a la app — el usuario debe volver a Login después
-  // de confirmar desde su correo.
   function mostrarAlertaVerificacion(correoDestino) {
     mostrar({
       tipo: 'exito',
@@ -117,7 +146,6 @@ const { mostrar, AlertaPersonalizada } = useAlerta();
       icono: 'mail-outline',
       boton: 'Entendido',
       onConfirmar: () => {
-        Linking.openURL('https://mail.google.com').catch(() => {});
         navigation.navigate('Login');
       },
     });
@@ -139,7 +167,10 @@ const resp = await intentarRegistroServidor(email, password, nombre, telefono, c
         return;
      } else if (resp && !resp.ok) {
   let msg = 'Error al registrar';
-  try { const d = await resp.json(); msg = d.error || msg; } catch {}
+  try {
+    const d = await resp.json();
+    msg = d.mensaje || d.error || msg;
+  } catch {}
 
   if (resp.status === 409) {
     mostrar({
@@ -192,7 +223,6 @@ onConfirmar: () => navigation.navigate('Login'),
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <StatusBar barStyle="light-content" />
 
-      {/* Header gradiente */}
       <LinearGradient
         colors={[COLORES.gradienteInicio, COLORES.gradienteMedio]}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -229,9 +259,12 @@ onConfirmar: () => navigation.navigate('Login'),
 
           <Campo label="Correo electrónico" value={email} onChange={setEmail} onClearError={clearError}
             placeholder="correo@ejemplo.com" icono="mail-outline" keyboardType="email-address" error={errores.email} />
+
           <Campo label="Contraseña" value={password} onChange={setPassword} onClearError={clearError}
-            placeholder="Mínimo 6 caracteres" icono="lock-closed-outline"
+            placeholder="Mínimo 8 caracteres" icono="lock-closed-outline"
             secure={!verPass} onToggleSecure={() => setVerPass(!verPass)} mostrarToggle error={errores.password} />
+          <ChecklistPassword password={password} />
+
           <Campo label="Confirmar contraseña" value={confirmar} onChange={setConfirmar} onClearError={clearError}
             placeholder="Repite tu contraseña" icono="lock-closed-outline"
             secure={!verConf} onToggleSecure={() => setVerConf(!verConf)} mostrarToggle error={errores.confirmar} />
@@ -304,6 +337,10 @@ const styles = StyleSheet.create({
   ojito:      { paddingHorizontal: 14 },
   textoError: { color: COLORES.error, fontSize: 12, marginTop: 4, marginLeft: 4 },
   errorGeneral: { color: COLORES.error, fontSize: 13, textAlign: 'center', marginBottom: 12, lineHeight: 18 },
+
+  checklist:       { marginTop: -6, marginBottom: 14, paddingHorizontal: 4 },
+  checklistFila:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
+  checklistTexto:  { fontSize: 11, color: COLORES.mutedForeground },
 
   boton:         { borderRadius: 14, overflow: 'hidden', marginTop: 12 },
   botonDesactivado: { opacity: 0.7 },

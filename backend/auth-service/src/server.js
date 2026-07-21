@@ -13,7 +13,7 @@ const PORT       = Number(process.env.PORT || 3001);
 const JWT_SECRET = process.env.JWT_SECRET;
 
 const MAX_INTENTOS_LOGIN  = 5;
-const BLOQUEO_SEGUNDOS    = 15 * 60; 
+const BLOQUEO_SEGUNDOS    = 15 * 60; // 15 minutos
 
 app.use(cors());
 app.use(express.json());
@@ -22,14 +22,6 @@ function assertEnv() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL es obligatoria");
   if (!JWT_SECRET || JWT_SECRET.length < 16) throw new Error("JWT_SECRET inválido");
 }
-
-/**
- * se implementa el middleware para validar el jwt
- * de ser valido agrega el payload decodificado en req.usuario.
- * @param {Object} req - Solicitud HTTP con header Authorization: Bearer <token>.
- * @param {Object} res - Respuesta HTTP.
- * @param {Function} next - Siguiente middleware en la cadena.
- */
 
 function verificarToken(req, res, next) {
   const header = req.headers.authorization || '';
@@ -43,22 +35,29 @@ function verificarToken(req, res, next) {
   }
 }
 
-/**
- * Bloquea por intentos fallidos y verifica con nodemailer
- * @param {string} email
- * @returns {string} clave login_attempts:<email>
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// VALIDACIÓN DE CONTRASEÑA ESTILO BANCARIO
+// Reglas: mínimo 8 caracteres, mayúscula, minúscula, número y símbolo especial.
+// Se valida también aquí (no solo en el frontend) porque el frontend se puede
+// saltar llamando directo a la API — esta es la capa que de verdad protege.
+// ─────────────────────────────────────────────────────────────────────────────
+function validarPassword(password) {
+  const errores = [];
+  if (!password || password.length < 8)        errores.push("mínimo 8 caracteres");
+  if (!/[A-Z]/.test(password || ''))            errores.push("al menos una mayúscula");
+  if (!/[a-z]/.test(password || ''))            errores.push("al menos una minúscula");
+  if (!/[0-9]/.test(password || ''))            errores.push("al menos un número");
+  if (!/[^A-Za-z0-9]/.test(password || ''))     errores.push("al menos un símbolo especial (ej: !@#$%)");
+  return errores;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RATE LIMITING DE LOGIN (Fase 4a) — bloqueo temporal tras intentos fallidos
+// ─────────────────────────────────────────────────────────────────────────────
+
 function claveIntentos(email) {
   return `login_attempts:${email.toLowerCase()}`;
 }
-
-/**
- * contador de intentos fallidos en redis para un email
- * al primer fallido reinicia con un ttl 15 mins
- * @param {Object} redis - Cliente Redis activo
- * @param {string} email - Correo del usuario que falló el login
- * @returns {Promise<number>} total intentos
- */
 
 async function registrarIntentoFallido(redis, email) {
   const key = claveIntentos(email);
@@ -84,6 +83,9 @@ async function limpiarIntentosFallidos(redis, email) {
   await redis.del(claveIntentos(email));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// VERIFICACIÓN DE EMAIL (Fase 4b) — Gmail + Nodemailer
+// ─────────────────────────────────────────────────────────────────────────────
 
 let transporter = null;
 function getTransporter() {
@@ -109,7 +111,7 @@ async function enviarCorreoVerificacion(email, token) {
   await getTransporter().sendMail({
     from: `"Athenea" <${process.env.GMAIL_USER}>`,
     to: email,
-    subject: "Confirme su cuenta en Athenea",
+    subject: "Confirma tu cuenta en Athenea",
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
         <h2 style="color: #0B7B8B;">Bienvenido a Athenea</h2>
@@ -125,13 +127,106 @@ async function enviarCorreoVerificacion(email, token) {
   });
 }
 
+// Página HTML mostrada al usuario cuando toca el link de verificación desde
+// su correo (se abre en el navegador del celular, no dentro de la app).
+// Diseño tipo "tarjeta de alerta" centrada, siguiendo la paleta de Athenea.
+function paginaConfirmacion({ exito, titulo, mensaje }) {
+  const colorPrincipal = exito ? '#0B7B8B' : '#C62828';
+  const colorFondoIcono = exito ? '#E8F8F9' : '#FDEAEA';
+  const icono = exito
+    ? `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+         <path d="M20 6L9 17l-5-5" stroke="${colorPrincipal}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+       </svg>`
+    : `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+         <path d="M18 6L6 18M6 6l12 12" stroke="${colorPrincipal}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+       </svg>`;
 
+  return `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${titulo} — Athenea</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #0D3B44, #0B7B8B);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .tarjeta {
+      background: #fff;
+      border-radius: 24px;
+      padding: 40px 32px;
+      max-width: 380px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+    }
+    .icono-circulo {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: ${colorFondoIcono};
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 24px;
+    }
+    h1 {
+      font-size: 22px;
+      color: #0D3B44;
+      margin-bottom: 12px;
+      font-weight: 800;
+    }
+    p {
+      font-size: 15px;
+      color: #6A9BAB;
+      line-height: 1.6;
+    }
+    .marca {
+      margin-top: 32px;
+      font-size: 12px;
+      color: #AAC4CC;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="tarjeta">
+    <div class="icono-circulo">${icono}</div>
+    <h1>${titulo}</h1>
+    <p>${mensaje}</p>
+    <div class="marca">Athenea</div>
+  </div>
+</body>
+</html>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENDPOINTS
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.post("/register", async (req, res) => {
   console.log('registro recibido:', req.body);
   const { email, password, nombre = '', telefono = '', cedula = '' } = req.body || {};
   if (!email || !password)
     return res.status(400).json({ error: "email y password requeridos" });
+
+  // Validación de contraseña estilo bancario — capa de seguridad real,
+  // independiente de la validación que ya hace el frontend.
+  const erroresPassword = validarPassword(password);
+  if (erroresPassword.length > 0) {
+    return res.status(400).json({
+      error: "contraseña insegura",
+      mensaje: `La contraseña debe tener: ${erroresPassword.join(', ')}.`,
+      requisitos: erroresPassword,
+    });
+  }
 
   const passwordHash = await bcrypt.hash(password, 12);
   const tokenVerificacion = generarTokenVerificacion();
@@ -148,15 +243,10 @@ app.post("/register", async (req, res) => {
     try {
       await enviarCorreoVerificacion(user.email, tokenVerificacion);
     } catch (errCorreo) {
-  /**
-   * El registro ya quedó guardado, solo falló el correo - Se registra el error pero no se cancela el registro
-   */
       console.error("[/register] Error enviando correo de verificación:", errCorreo.message);
     }
 
-    /**
-     * no devuelve token no se puede usar hasta confirm email 
-     */
+    // No se devuelve token: la cuenta no puede usarse hasta confirmar el correo.
     return res.status(201).json({
       mensaje: "Cuenta creada. Revisa tu correo para confirmar tu cuenta antes de iniciar sesión.",
       email: user.email,
@@ -171,7 +261,11 @@ app.post("/register", async (req, res) => {
 app.get("/verificar-email", async (req, res) => {
   const { token } = req.query;
   if (!token) {
-    return res.status(400).send("<h2>Enlace inválido.</h2>");
+    return res.status(400).send(paginaConfirmacion({
+      exito: false,
+      titulo: 'Enlace inválido',
+      mensaje: 'Este enlace de confirmación no es válido.',
+    }));
   }
 
   try {
@@ -183,23 +277,25 @@ app.get("/verificar-email", async (req, res) => {
     );
 
     if (!result.rows[0]) {
-      return res.status(400).send(`
-        <html><body style="font-family: Arial, sans-serif; text-align: center; padding: 40px;">
-          <h2 style="color: #C62828;">Enlace inválido o ya utilizado</h2>
-          <p>Este enlace de verificación ya no es válido. Si tu cuenta ya está confirmada, puedes iniciar sesión normalmente.</p>
-        </body></html>
-      `);
+      return res.status(400).send(paginaConfirmacion({
+        exito: false,
+        titulo: 'Enlace ya utilizado',
+        mensaje: 'Este enlace de verificación ya no es válido. Si tu cuenta ya está confirmada, puedes iniciar sesión con normalidad.',
+      }));
     }
 
-    return res.send(`
-      <html><body style="font-family: Arial, sans-serif; text-align: center; padding: 40px;">
-        <h2 style="color: #0B7B8B;">¡Cuenta confirmada!</h2>
-        <p>Tu correo fue verificado correctamente. Ya puedes volver a la app de Athenea e iniciar sesión.</p>
-      </body></html>
-    `);
+    return res.send(paginaConfirmacion({
+      exito: true,
+      titulo: '¡Cuenta confirmada!',
+      mensaje: 'Ya puede volver a la aplicación e iniciar sesión.',
+    }));
   } catch (e) {
     console.error(e);
-    return res.status(500).send("<h2>Error interno al verificar la cuenta.</h2>");
+    return res.status(500).send(paginaConfirmacion({
+      exito: false,
+      titulo: 'Error interno',
+      mensaje: 'No se pudo verificar la cuenta. Intenta de nuevo más tarde.',
+    }));
   }
 });
 
@@ -242,9 +338,6 @@ app.post("/login", async (req, res) => {
     });
   }
 
-  /**
-   * procesa la verificación de email sin mostrar si una cuenta existe
-   */
   if (!user.email_verificado) {
     return res.status(403).json({
       error: "email no verificado",
@@ -254,12 +347,19 @@ app.post("/login", async (req, res) => {
 
   await limpiarIntentosFallidos(redis, email);
 
+  // JWT eterno: no se pasa "expiresIn", por lo que el token no incluye
+  // claim "exp" y jwt.verify() lo trata como válido indefinidamente.
+  // Decisión explícita del proyecto — ver advertencia de seguridad asociada.
   const token = jwt.sign(
     { sub: user.id, email: user.email, role_id: user.role_id },
-    JWT_SECRET,
-    { expiresIn: "30d" }
+    JWT_SECRET
   );
-  await redis.setEx(`session:${user.id}`, 60 * 60 * 24 * 30, token);
+
+  // La clave de sesión en Redis también queda sin expiración, por consistencia
+  // con la filosofía de sesión "eterna" (aunque esta clave no es la que
+  // realmente autoriza el acceso — eso lo hace jwt.verify sobre el token).
+  await redis.set(`session:${user.id}`, token);
+
   return res.json({
     token,
     user: {
