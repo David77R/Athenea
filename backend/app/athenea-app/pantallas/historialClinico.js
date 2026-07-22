@@ -20,23 +20,27 @@ function parsearHistoria(item) {
   try {
     const datos = typeof item.datos === 'string' ? JSON.parse(item.datos) : item.datos;
     return {
-      id:           item.id,
-      sincronizado: item.sincronizado,
-      creadoEn:     item.creado_en,
-      paciente:     datos.paciente     || {},
-      anamnesis:    datos.anamnesis    || {},
-      examen:       datos.examen       || {},
-      diagnostico:  datos.diagnostico  || {},
+      id:            item.id,
+      sincronizado:  item.sincronizado,
+      creadoEn:      item.creado_en,
+      actualizadoEn: item.actualizado_en,
+      paciente:      datos.paciente      || {},
+      anamnesis:     datos.anamnesis     || {},
+      examen:        datos.examen        || {},
+      especializado: datos.especializado || {},
+      diagnostico:   datos.diagnostico   || {},
     };
   } catch {
     return {
-      id:           item.id,
-      sincronizado: item.sincronizado,
-      creadoEn:     item.creado_en,
-      paciente:     {},
-      anamnesis:    {},
-      examen:       {},
-      diagnostico:  {},
+      id:            item.id,
+      sincronizado:  item.sincronizado,
+      creadoEn:      item.creado_en,
+      actualizadoEn: item.actualizado_en,
+      paciente:      {},
+      anamnesis:     {},
+      examen:        {},
+      especializado: {},
+      diagnostico:   {},
     };
   }
 }
@@ -196,7 +200,7 @@ export default function HistorialClinico({ navigation, route, setToken }) {
 
         <View style={styles.cardFooter}>
           <Ionicons name="calendar-outline" size={12} color={COLORES.mutedForeground} />
-          <Text style={styles.cardFecha}>{formatFecha(item.creadoEn)}</Text>
+          <Text style={styles.cardFecha}>Última edición: {formatFecha(item.actualizadoEn || item.creadoEn)}</Text>
           <Text style={styles.cardVerMas}>Ver detalle →</Text>
         </View>
       </TouchableOpacity>
@@ -333,20 +337,13 @@ export default function HistorialClinico({ navigation, route, setToken }) {
                 onPress={() => {
                   setModalVisible(false);
                   setTimeout(() => navigation.navigate('Formulario', {
-                    datosIA: {
-                      paciente:            h.paciente,
-                      motivo:              h.anamnesis?.motivo,
-                      tiempoEvolucion:     h.anamnesis?.tiempoEvolucion,
-                      antOcularPersonal:   h.anamnesis?.antOcularPersonal,
-                      antOcularFamiliar:   h.anamnesis?.antOcularFamiliar,
-                      antMedicos:          h.anamnesis?.antMedicos,
-                      usaLentes:           h.anamnesis?.usaLentes,
-                      tipoLentes:          h.anamnesis?.tipoLentes,
-                      visualAcuity:        { od: h.examen?.avscOD, oi: h.examen?.avscOI, ccOD: h.examen?.avccOD, ccOI: h.examen?.avccOI },
-                      refraccion:          { esf_od: h.examen?.esfOD, esf_oi: h.examen?.esfOI, cil_od: h.examen?.cilOD, cil_oi: h.examen?.cilOI, eje_od: h.examen?.ejeOD, eje_oi: h.examen?.ejeOI, add_od: h.examen?.addOD, add_oi: h.examen?.addOI },
-                      intraocularPressure: { od: h.examen?.pioOD, oi: h.examen?.pioOI },
-                      diagnosisPreliminary: h.diagnostico?.diagPrincipal,
-                      observations:        h.diagnostico?.observaciones,
+                    historiaEdicion: {
+                      historia_id:   h.id,
+                      paciente:      h.paciente,
+                      anamnesis:     h.anamnesis,
+                      examen:        h.examen,
+                      especializado: h.especializado,
+                      diagnostico:   h.diagnostico,
                     },
                   }), 300);
                 }}

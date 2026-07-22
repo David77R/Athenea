@@ -6,6 +6,7 @@ const {
   obtenerHistorias,
   obtenerHistoriaPorId,
   obtenerHistoriasPorPaciente,
+  actualizarHistoria,
 } = require('../controllers/contrHistorias');
 
 router.use(verificarToken);
@@ -14,5 +15,6 @@ router.post('/', crearHistoria);
 router.get('/', obtenerHistorias);
 router.get('/paciente/:paciente_id', obtenerHistoriasPorPaciente);
 router.get('/:id', obtenerHistoriaPorId);
+router.put('/:id', actualizarHistoria);
 
 module.exports = router;

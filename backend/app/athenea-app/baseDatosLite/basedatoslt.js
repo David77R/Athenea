@@ -11,12 +11,24 @@ export async function inicializarDB() {
       creado_en   TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  try {
+    await db.execAsync(`ALTER TABLE historias_pendientes ADD COLUMN actualizado_en TEXT;`);
+  } catch (e) {
+    // La columna ya existe (proyectos ya inicializados antes de este cambio)
+  }
+
   console.log('Base de datos local lista ✓');
 }
 
 export async function guardarHistoriaLocal(id, datos) {
   await db.runAsync(
-    'INSERT OR REPLACE INTO historias_pendientes (id, datos, sincronizado) VALUES (?, ?, 0)',
+    `INSERT INTO historias_pendientes (id, datos, sincronizado, actualizado_en)
+     VALUES (?, ?, 0, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       datos = excluded.datos,
+       sincronizado = 0,
+       actualizado_en = datetime('now')`,
     [id, JSON.stringify(datos)]
   );
 }

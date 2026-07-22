@@ -1,7 +1,4 @@
-﻿#   1) cp .env.example .env  (ajusta MONGODB_URI si usas Atlas)
-#   2) docker compose up --build
-#   API: http://localhost:8080/api/auth/health
-#
+﻿
 services:
   postgres:
     image: postgres:16-alpine
@@ -12,9 +9,21 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-athenea_dev}
       POSTGRES_DB: ${POSTGRES_DB:-athenea_db}
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: athenea-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@athenea.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
 
   redis:
     image: redis:7-alpine

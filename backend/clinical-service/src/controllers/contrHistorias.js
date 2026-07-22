@@ -86,4 +86,39 @@ async function obtenerHistoriaPorId(req, res) {
   }
 }
 
-module.exports = { crearHistoria, obtenerHistorias, obtenerHistoriaPorId, obtenerHistoriasPorPaciente };
+async function actualizarHistoria(req, res) {
+    try {
+        const { id } = req.params;
+
+        const historia = await Historia.findOne({
+            historia_id: id,
+            optometrista_id: req.usuario.sub,
+        });
+
+        if (!historia) {
+            return res.status(404).json({ error: 'Historia no encontrada' });
+        }
+
+        const actualizaciones = { ...req.body };
+        delete actualizaciones.historia_id;
+        delete actualizaciones.optometrista_id;
+        delete actualizaciones._id;
+
+        if (actualizaciones.paciente?.cedula) {
+            actualizaciones.paciente_id = actualizaciones.paciente.cedula;
+        }
+
+        Object.assign(historia, actualizaciones);
+        await historia.save();
+
+        return res.json(historia);
+    } catch (e) {
+        if (e.name === 'ValidationError') {
+            return res.status(400).json({ error: e.message });
+        }
+        console.error(e);
+        return res.status(500).json({ error: 'Error interno' });
+    }
+}
+
+module.exports = { crearHistoria, obtenerHistorias, obtenerHistoriaPorId, obtenerHistoriasPorPaciente, actualizarHistoria };

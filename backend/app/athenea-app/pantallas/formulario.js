@@ -146,7 +146,8 @@ function ModalTextoIA({ textoIA, visible, onCerrar }) {
 }
 
 export default function FormularioScreen({ route, navigation }) {
-  const { textoIA, datosIA } = route.params || {};
+  const { textoIA, datosIA, historiaEdicion } = route.params || {};
+  const esEdicion = !!historiaEdicion;
   const insets = useSafeAreaInsets();
   const { mostrar, AlertaPersonalizada } = useAlerta();
   const [pasoActual,   setPasoActual]   = useState(0);
@@ -161,7 +162,7 @@ export default function FormularioScreen({ route, navigation }) {
   const [edad,         setEdad]         = useState('');
   const [telefono,     setTelefono]     = useState('');
   const [ocupacion,    setOcupacion]    = useState('');
-  const [nroHistoria]  = useState(`HC-${Date.now()}`);
+  const [nroHistoria]  = useState(historiaEdicion?.historia_id || `HC-${Date.now()}`);
   const fechaConsulta  = new Date().toLocaleDateString('es-ES');
 
   const [motivo,            setMotivo]       = useState('');
@@ -283,6 +284,66 @@ export default function FormularioScreen({ route, navigation }) {
     if (datosIA.observations)          setObservaciones(datosIA.observations);
   }, [datosIA]);
 
+  useEffect(() => {
+    if (!historiaEdicion) return;
+    const { paciente, anamnesis, examen, especializado, diagnostico } = historiaEdicion;
+
+    if (paciente?.nombre) setNombre(paciente.nombre);
+    if (paciente?.cedula) {
+      const ced = String(paciente.cedula).toUpperCase();
+      if (ced.startsWith('V') || ced.startsWith('E')) { setCedulaPrefix(ced.charAt(0)); setCedula(ced.substring(1)); }
+      else { setCedulaPrefix('V'); setCedula(ced); }
+    }
+    if (paciente?.fechaNac) {
+      setFechaNac(paciente.fechaNac);
+      const fecha = parsearFecha(paciente.fechaNac);
+      if (fecha) setFechaObj(fecha);
+    }
+    if (paciente?.edad)      setEdad(String(paciente.edad));
+    if (paciente?.telefono)  setTelefono(String(paciente.telefono));
+    if (paciente?.ocupacion) setOcupacion(paciente.ocupacion);
+
+    if (anamnesis?.motivo)            setMotivo(anamnesis.motivo);
+    if (anamnesis?.tiempoEvolucion)   setTiempoEvo(anamnesis.tiempoEvolucion);
+    if (anamnesis?.antOcularPersonal) setAntOcPer(anamnesis.antOcularPersonal);
+    if (anamnesis?.antOcularFamiliar) setAntOcFam(anamnesis.antOcularFamiliar);
+    if (anamnesis?.antMedicos)        setAntMed(anamnesis.antMedicos);
+    if (anamnesis?.usaLentes !== undefined) setUsaLentes(!!anamnesis.usaLentes);
+    if (anamnesis?.tipoLentes)        setTipoLentes(anamnesis.tipoLentes);
+    if (anamnesis?.medicamentos)      setMedicamentos(anamnesis.medicamentos);
+
+    if (examen?.avscOD != null) setAvscOD(String(examen.avscOD));
+    if (examen?.avscOI != null) setAvscOI(String(examen.avscOI));
+    if (examen?.avccOD != null) setAvccOD(String(examen.avccOD));
+    if (examen?.avccOI != null) setAvccOI(String(examen.avccOI));
+    if (examen?.esfOD  != null) setEsfOD(String(examen.esfOD));
+    if (examen?.esfOI  != null) setEsfOI(String(examen.esfOI));
+    if (examen?.cilOD  != null) setCilOD(String(examen.cilOD));
+    if (examen?.cilOI  != null) setCilOI(String(examen.cilOI));
+    if (examen?.ejeOD  != null) setEjeOD(String(examen.ejeOD));
+    if (examen?.ejeOI  != null) setEjeOI(String(examen.ejeOI));
+    if (examen?.addOD  != null) setAddOD(String(examen.addOD));
+    if (examen?.addOI  != null) setAddOI(String(examen.addOI));
+    if (examen?.pioOD  != null) setPioOD(String(examen.pioOD));
+    if (examen?.pioOI  != null) setPioOI(String(examen.pioOI));
+    if (examen?.ishaOD) setIshaOD(examen.ishaOD);
+    if (examen?.ishaOI) setIshaOI(examen.ishaOI);
+    if (examen?.biomicroscopia) setBiomicroscopia(examen.biomicroscopia);
+    if (examen?.fondoOjoOD) setFondoOjoOD(examen.fondoOjoOD);
+    if (examen?.fondoOjoOI) setFondoOjoOI(examen.fondoOjoOI);
+
+    if (especializado?.tonometria)          setTonometria(especializado.tonometria);
+    if (especializado?.lensometria)         setLensometria(especializado.lensometria);
+    if (especializado?.autorrefractometria) setAutorrefractometria(especializado.autorrefractometria);
+    if (especializado?.oftalmoscopio)       setOftalmoscopio(especializado.oftalmoscopio);
+    if (especializado?.derivacion)          setDerivacion(especializado.derivacion);
+
+    if (diagnostico?.diagPrincipal)  setDiagPrincipal(diagnostico.diagPrincipal);
+    if (diagnostico?.prescripcion)   setPrescripcion(diagnostico.prescripcion);
+    if (diagnostico?.proximaCita)    setProximaCita(diagnostico.proximaCita);
+    if (diagnostico?.observaciones)  setObservaciones(diagnostico.observaciones);
+  }, [historiaEdicion]);
+
   function onFechaSeleccionada(event, selectedDate) {
     setMostrarCal(false);
     if (event.type === 'dismissed' || !selectedDate) return;
@@ -337,8 +398,11 @@ export default function FormularioScreen({ route, navigation }) {
       const token = await AsyncStorage.getItem('token');
       let guardadoEnNube = false;
       try {
-        const resp = await fetch(`${CONFIG.CLINICAL_URL}/historias`, {
-          method: 'POST',
+        const urlDestino = esEdicion
+          ? `${CONFIG.CLINICAL_URL}/historias/${nroHistoria}`
+          : `${CONFIG.CLINICAL_URL}/historias`;
+        const resp = await fetch(urlDestino, {
+          method: esEdicion ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
             historia_id: nroHistoria,
@@ -361,9 +425,9 @@ export default function FormularioScreen({ route, navigation }) {
       await guardarHistoriaLocal(id, { ...historia, sincronizado: guardadoEnNube ? 1 : 0 });
       mostrar({
         tipo: 'exito',
-        titulo: guardadoEnNube ? '¡Historia guardada!' : '📱 Guardada localmente',
+        titulo: guardadoEnNube ? (esEdicion ? '¡Historia actualizada!' : '¡Historia guardada!') : '📱 Guardada localmente',
         mensaje: guardadoEnNube
-          ? `La historia de ${nombre} fue guardada y sincronizada exitosamente.\n\n⚠️ Precaución: si borra todos los datos desde Ajustes Generales, no podrá recuperar esta información.`
+          ? `La historia de ${nombre} fue ${esEdicion ? 'actualizada' : 'guardada'} y sincronizada exitosamente.\n\n⚠️ Precaución: si borra todos los datos desde Ajustes Generales, no podrá recuperar esta información.`
           : `La historia de ${nombre} fue guardada en el dispositivo. Se sincronizará al conectarse.\n\n⚠️ Precaución: si borra todos los datos desde Ajustes Generales antes de sincronizar, esta información se perderá permanentemente.`,
         icono: guardadoEnNube ? 'cloud-done-outline' : 'phone-portrait-outline',
         boton: guardadoEnNube ? '¡Perfecto!' : 'Entendido',
@@ -657,7 +721,7 @@ export default function FormularioScreen({ route, navigation }) {
               <Text style={styles.headerNum}>{pasoActual + 1}/{PASOS.length} </Text>
               {PASOS[pasoActual]}
             </Text>
-            <Text style={styles.headerSub}>Formulario de Historia Clínica</Text>
+            <Text style={styles.headerSub}>{esEdicion ? 'Editando historia clínica' : 'Formulario de Historia Clínica'}</Text>
           </View>
           <View style={{ width: 38 }} />
         </View>
@@ -699,7 +763,7 @@ export default function FormularioScreen({ route, navigation }) {
           </TouchableOpacity>
         ) : <View style={{ flex: 1 }} />}
         <TouchableOpacity style={pasoActual < PASOS.length - 1 ? styles.btnSiguiente : styles.btnGuardar} onPress={siguientePaso}>
-          <Text style={styles.btnSiguienteTexto}>{pasoActual < PASOS.length - 1 ? 'Siguiente' : 'Guardar'}</Text>
+          <Text style={styles.btnSiguienteTexto}>{pasoActual < PASOS.length - 1 ? 'Siguiente' : (esEdicion ? 'Actualizar' : 'Guardar')}</Text>
           <Ionicons name={pasoActual < PASOS.length - 1 ? 'chevron-forward' : 'save-outline'} size={16} color="#fff" />
         </TouchableOpacity>
       </View>

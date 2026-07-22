@@ -43,10 +43,11 @@ function convertirFecha(fechaStr) {
  for (const registro of pendientes) {
     try {
       const datosParaSubir = JSON.parse(registro.datos);
-      const paciente    = datosParaSubir.paciente    || {};
-      const anamnesis   = datosParaSubir.anamnesis   || {};
-      const examen      = datosParaSubir.examen      || {};
-      const diagnostico = datosParaSubir.diagnostico || {};
+      const paciente      = datosParaSubir.paciente      || {};
+      const anamnesis     = datosParaSubir.anamnesis     || {};
+      const examen        = datosParaSubir.examen        || {};
+      const especializado = datosParaSubir.especializado || {};
+      const diagnostico   = datosParaSubir.diagnostico   || {};
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
@@ -58,6 +59,8 @@ function convertirFecha(fechaStr) {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
+          historia_id: registro.id,
+          paciente_id: paciente.cedula || '',
           paciente: {
             nombre:           paciente.nombre   || '',
             cedula:           paciente.cedula   || '',
@@ -70,8 +73,19 @@ function convertirFecha(fechaStr) {
             ojo_izquierdo: examen.avscOI || '',
           },
           refraccion: {
-            ojo_derecho:   { esferico: parseFloat(examen.esfOD)||0, cilindrico: parseFloat(examen.cilOD)||0, eje: parseFloat(examen.ejeOD)||0 },
-            ojo_izquierdo: { esferico: parseFloat(examen.esfOI)||0, cilindrico: parseFloat(examen.cilOI)||0, eje: parseFloat(examen.ejeOI)||0 },
+            ojo_derecho:   { esferico: parseFloat(examen.esfOD)||0, cilindrico: parseFloat(examen.cilOD)||0, eje: parseFloat(examen.ejeOD)||0, adicion: parseFloat(examen.addOD)||0 },
+            ojo_izquierdo: { esferico: parseFloat(examen.esfOI)||0, cilindrico: parseFloat(examen.cilOI)||0, eje: parseFloat(examen.ejeOI)||0, adicion: parseFloat(examen.addOI)||0 },
+          },
+          presion_intraocular: {
+            ojo_derecho:   parseFloat(examen.pioOD)||0,
+            ojo_izquierdo: parseFloat(examen.pioOI)||0,
+          },
+          examen_especializado: {
+            tonometria:          especializado.tonometria          || '',
+            lensometria:         especializado.lensometria         || '',
+            autorrefractometria: especializado.autorrefractometria || '',
+            oftalmoscopio:       especializado.oftalmoscopio       || '',
+            derivacion:          especializado.derivacion          || '',
           },
           diagnostico:   diagnostico.diagPrincipal || '',
           tratamiento:   diagnostico.prescripcion  || '',
@@ -84,6 +98,9 @@ function convertirFecha(fechaStr) {
 
      console.log('RESPUESTA SYNC:', respuesta.status, respuesta.ok);
       if (respuesta.ok) {
+        await marcarComoSincronizada(registro.id);
+        subidos++;
+      } else if (respuesta.status === 409) {
         await marcarComoSincronizada(registro.id);
         subidos++;
       } else {
