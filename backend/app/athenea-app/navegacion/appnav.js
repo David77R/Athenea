@@ -63,7 +63,7 @@ export default function AppNav({ token, setToken }) {
               component={Animaciones}
               options={transicionFade}
             />
-            <Stack.Screen name="Login" options={transicionModal}>
+            <Stack.Screen name="Login" options={transicionFade}>
               {(props) => <Login {...props} setToken={setToken} />}
             </Stack.Screen>
             <Stack.Screen name="Registro" options={transicionModal}>

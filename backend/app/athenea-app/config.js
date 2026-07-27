@@ -23,9 +23,9 @@ const CONFIG = {
 
    // gabi
    
-   API_URL: 'http://10.88.57.206:3001',
-  CLINICAL_URL: 'http://10.88.57.206:3002',
-   IA_URL: 'http://10.88.57.206:3003',
+   // API_URL: 'http://10.88.57.206:3001',
+  // CLINICAL_URL: 'http://10.88.57.206:3002',
+   //IA_URL: 'http://10.88.57.206:3003',
 };
 
 export default CONFIG;

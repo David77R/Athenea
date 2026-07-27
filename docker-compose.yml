@@ -1,5 +1,4 @@
-﻿
-services:
+﻿services:
   postgres:
     image: postgres:16-alpine
     container_name: athenea-postgres
@@ -12,6 +11,12 @@ services:
       - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-athenea} -d ${POSTGRES_DB:-athenea_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -42,8 +47,10 @@ services:
     restart: unless-stopped
     command: node src/server.js
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       NODE_ENV: development
       PORT: 3001

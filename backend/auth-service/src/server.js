@@ -212,7 +212,7 @@ function paginaConfirmacion({ exito, titulo, mensaje }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.post("/register", async (req, res) => {
-  console.log('registro recibido:', req.body);
+  console.log('registro recibido:', { ...req.body, password: '[REDACTADO]' });
   const { email, password, nombre = '', telefono = '', cedula = '' } = req.body || {};
   if (!email || !password)
     return res.status(400).json({ error: "email y password requeridos" });
@@ -240,11 +240,14 @@ app.post("/register", async (req, res) => {
     );
     const user = result.rows[0];
 
-    try {
-      await enviarCorreoVerificacion(user.email, tokenVerificacion);
-    } catch (errCorreo) {
+    // No se espera (await) el envío del correo antes de responder — el envío
+    // por Gmail puede tardar más de lo razonable para que el celular lo espere,
+    // y bloquear la respuesta HTTP hasta que Gmail confirme provoca que la app
+    // aborte por timeout y caiga al modo local, aunque el registro sí se haya
+    // completado correctamente en el servidor.
+    enviarCorreoVerificacion(user.email, tokenVerificacion).catch((errCorreo) => {
       console.error("[/register] Error enviando correo de verificación:", errCorreo.message);
-    }
+    });
 
     // No se devuelve token: la cuenta no puede usarse hasta confirmar el correo.
     return res.status(201).json({
